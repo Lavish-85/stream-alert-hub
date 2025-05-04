@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -15,7 +14,7 @@ import {
   DownloadCloud, 
   TrendingUp, 
   Users, 
-  Indian,
+  BadgeIndianRupee,
   Clock 
 } from "lucide-react";
 import {
@@ -207,7 +206,7 @@ const AnalyticsPage = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Today's Donations</CardTitle>
-            <Indian className="h-4 w-4 text-muted-foreground" />
+            <BadgeIndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatIndianRupees(metrics.todayTotal)}</div>
