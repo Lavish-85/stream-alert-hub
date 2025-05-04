@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Select, 
@@ -35,81 +36,90 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
-// Mock data for the analytics charts and tables
-const generateMockDonationData = (days: number) => {
+// Type definitions for the donations data
+interface Donation {
+  id: number;
+  payment_id: string;
+  amount: number;
+  donor_name: string;
+  message: string | null;
+  created_at: string;
+}
+
+// Function to fetch donations from Supabase
+const fetchDonations = async () => {
+  const { data, error } = await supabase
+    .from('donations')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching donations:', error);
+    throw error;
+  }
+  
+  return data as Donation[];
+};
+
+// Generate donation analytics data from real donations
+const generateDonationAnalytics = (donations: Donation[], days: number = 30) => {
   const data = [];
   const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - days);
   
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    
-    // Generate a random donation amount between 500 and 5000
-    const amount = Math.floor(Math.random() * 4500) + 500;
-    // More donations during weekends and peak hours
-    const factor = date.getDay() === 0 || date.getDay() === 6 ? 1.5 : 1;
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      amount: Math.floor(amount * factor),
-      // Add some variation to the chart
-      viewers: Math.floor((Math.random() * 200) + 100),
-    });
+  // Create a map for each day
+  const dailyMap: Record<string, { date: string, amount: number, viewers: number }> = {};
+  
+  // Initialize the map with zero values for each day
+  for (let i = 0; i <= days; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+    const dateStr = date.toISOString().split('T')[0];
+    dailyMap[dateStr] = {
+      date: dateStr,
+      amount: 0,
+      // Add some random viewers data since it's not in the donations table
+      viewers: Math.floor((Math.random() * 200) + 100)
+    };
   }
   
-  return data;
+  // Aggregate donation amounts by date
+  donations.forEach(donation => {
+    const donationDate = new Date(donation.created_at).toISOString().split('T')[0];
+    if (donationDate in dailyMap) {
+      dailyMap[donationDate].amount += Number(donation.amount);
+    }
+  });
+  
+  // Convert the map to an array
+  return Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 };
 
-// Generate random recent donations
-const generateRecentDonations = () => {
-  const names = ["Rahul S.", "Priya M.", "Amit K.", "Neha G.", "Vijay P.", "Sneha D.", 
-                "Arjun R.", "Kavita T.", "Deepak S.", "Ananya B."];
-  const messages = [
-    "Great stream! Keep it up!",
-    "Love your content!",
-    "This game is amazing, you're doing great",
-    "First time watching, definitely coming back",
-    "You deserve more viewers!",
-    "Thanks for the entertainment",
-    "",
-    "Can you play my favorite song next?",
-    "Hilarious reaction!",
-    ""
-  ];
-  
-  const donations = [];
-  
-  for (let i = 0; i < 10; i++) {
-    const today = new Date();
-    const minutesAgo = Math.floor(Math.random() * 120);
-    const timestamp = new Date(today.getTime() - minutesAgo * 60000);
-    
-    donations.push({
-      id: i,
-      name: names[i],
-      amount: Math.floor(Math.random() * 900) + 100,
-      message: messages[i],
-      timestamp: timestamp,
-    });
-  }
-  
-  return donations.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+// Format donations for the recent donations table
+const formatRecentDonations = (donations: Donation[]) => {
+  return donations.map(donation => ({
+    id: donation.id,
+    name: donation.donor_name,
+    amount: Number(donation.amount),
+    message: donation.message,
+    timestamp: new Date(donation.created_at)
+  }));
 };
 
-const chartData = generateMockDonationData(30);
-const recentDonations = generateRecentDonations();
-
-// Calculate analytics metrics
-const calculateMetrics = (donations: any[]) => {
+// Calculate analytics metrics from real donations
+const calculateMetrics = (donations: Donation[]) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  const todayDonations = recentDonations.filter(
-    d => d.timestamp.getTime() >= today.getTime()
+  const todayDonations = donations.filter(
+    d => new Date(d.created_at).getTime() >= today.getTime()
   );
   
-  const todayTotal = todayDonations.reduce((sum, d) => sum + d.amount, 0);
+  const todayTotal = todayDonations.reduce((sum, d) => sum + Number(d.amount), 0);
   const numberOfGifts = todayDonations.length;
   const averageDonation = numberOfGifts > 0 ? Math.round(todayTotal / numberOfGifts) : 0;
   
@@ -118,8 +128,8 @@ const calculateMetrics = (donations: any[]) => {
   let maxAmount = 0;
   
   for (const donation of todayDonations) {
-    if (donation.amount > maxAmount) {
-      maxAmount = donation.amount;
+    if (Number(donation.amount) > maxAmount) {
+      maxAmount = Number(donation.amount);
       topSupporter = donation;
     }
   }
@@ -132,11 +142,15 @@ const calculateMetrics = (donations: any[]) => {
   };
 };
 
-const metrics = calculateMetrics(recentDonations);
-
 const AnalyticsPage = () => {
   const [dateRange, setDateRange] = useState("7d");
   const [minAmount, setMinAmount] = useState(0);
+  
+  // Fetch donations using React Query
+  const { data: donations, isLoading, error } = useQuery({
+    queryKey: ['donations'],
+    queryFn: fetchDonations
+  });
   
   const formatIndianRupees = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -169,11 +183,36 @@ const AnalyticsPage = () => {
     return `${days} days ago`;
   };
   
+  // Process data once donations are loaded
+  const chartData = donations ? generateDonationAnalytics(donations, parseInt(dateRange.replace('d', ''))) : [];
+  const recentDonations = donations ? formatRecentDonations(donations) : [];
+  const metrics = donations ? calculateMetrics(donations) : { todayTotal: 0, numberOfGifts: 0, averageDonation: 0, topSupporter: null };
+  
   // Filter chart data based on selected date range
   const filteredChartData = () => {
     const days = parseInt(dateRange.replace('d', ''));
     return chartData.slice(-days);
   };
+
+  // Handle loading and error states
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto p-8 flex justify-center items-center">
+        <p className="text-lg">Loading analytics data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto p-8">
+        <div className="bg-red-50 p-4 rounded-md border border-red-200">
+          <h2 className="text-red-700 text-lg font-medium">Error loading donation data</h2>
+          <p className="text-red-600 mt-2">Please try again later or contact support.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -246,10 +285,10 @@ const AnalyticsPage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.topSupporter ? metrics.topSupporter.name : "-"}
+              {metrics.topSupporter ? metrics.topSupporter.donor_name : "-"}
             </div>
             <p className="text-xs text-muted-foreground">
-              {metrics.topSupporter ? formatIndianRupees(metrics.topSupporter.amount) : "No donations today"}
+              {metrics.topSupporter ? formatIndianRupees(Number(metrics.topSupporter.amount)) : "No donations today"}
             </p>
           </CardContent>
         </Card>
@@ -261,48 +300,54 @@ const AnalyticsPage = () => {
           <CardTitle>Donation Trends</CardTitle>
         </CardHeader>
         <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={filteredChartData()}
-              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8445ff" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#8445ff" stopOpacity={0.1}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis 
-                dataKey="date" 
-                tickFormatter={formatDate} 
-                tick={{fontSize: 12}}
-                stroke="#94a3b8" 
-              />
-              <YAxis 
-                tickFormatter={(value) => `₹${value}`} 
-                tick={{fontSize: 12}}
-                stroke="#94a3b8"
-              />
-              <RechartsTooltip 
-                formatter={(value: any) => [`₹${value}`, 'Amount']}
-                labelFormatter={(label) => formatDate(label.toString())}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '0.375rem',
-                  boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-                }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="amount" 
-                stroke="#8445ff" 
-                fillOpacity={1} 
-                fill="url(#colorAmount)" 
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={filteredChartData()}
+                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8445ff" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8445ff" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis 
+                  dataKey="date" 
+                  tickFormatter={formatDate} 
+                  tick={{fontSize: 12}}
+                  stroke="#94a3b8" 
+                />
+                <YAxis 
+                  tickFormatter={(value) => `₹${value}`} 
+                  tick={{fontSize: 12}}
+                  stroke="#94a3b8"
+                />
+                <RechartsTooltip 
+                  formatter={(value: any) => [`₹${value}`, 'Amount']}
+                  labelFormatter={(label) => formatDate(label.toString())}
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '0.375rem',
+                    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+                  }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="amount" 
+                  stroke="#8445ff" 
+                  fillOpacity={1} 
+                  fill="url(#colorAmount)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-muted-foreground">No donation data available for this period</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -342,25 +387,33 @@ const AnalyticsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentDonations
-                .filter(donation => donation.amount >= minAmount)
-                .map((donation) => (
-                  <TableRow key={donation.id}>
-                    <TableCell className="text-muted-foreground">
-                      {formatTimestamp(donation.timestamp)}
-                    </TableCell>
-                    <TableCell className="font-medium">{donation.name}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatIndianRupees(donation.amount)}
-                    </TableCell>
-                    <TableCell className={cn(
-                      "max-w-[300px] truncate",
-                      !donation.message && "text-muted-foreground italic"
-                    )}>
-                      {donation.message || "No message"}
-                    </TableCell>
-                  </TableRow>
-              ))}
+              {recentDonations.length > 0 ? (
+                recentDonations
+                  .filter(donation => donation.amount >= minAmount)
+                  .map((donation) => (
+                    <TableRow key={donation.id}>
+                      <TableCell className="text-muted-foreground">
+                        {formatTimestamp(donation.timestamp)}
+                      </TableCell>
+                      <TableCell className="font-medium">{donation.name}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatIndianRupees(donation.amount)}
+                      </TableCell>
+                      <TableCell className={cn(
+                        "max-w-[300px] truncate",
+                        !donation.message && "text-muted-foreground italic"
+                      )}>
+                        {donation.message || "No message"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center">
+                    <p className="text-muted-foreground">No donations found</p>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
