@@ -124,42 +124,42 @@ const LiveAlertsPage = () => {
       </div>
 
       {/* Alert Display */}
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         {alerts.length > 0 ? (
           alerts.map((donation) => (
             <Alert 
               key={donation.id}
               className={cn(
-                "transition-all duration-500",
+                "transition-all duration-500 p-6",
                 lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : ""
               )}
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="h-6 w-6 mt-0.5" />
               <div className="w-full">
                 <div className="flex justify-between items-start">
-                  <AlertTitle className="font-semibold">
+                  <AlertTitle className="font-semibold text-lg">
                     {donation.donor_name} donated {formatIndianRupees(donation.amount)}
                   </AlertTitle>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     {donation.created_at ? formatTime(donation.created_at) : 'Just now'}
                   </span>
                 </div>
-                <AlertDescription className="mt-1 text-sm text-muted-foreground">
+                <AlertDescription className="mt-2 text-base text-muted-foreground">
                   {donation.message || "No message"}
                 </AlertDescription>
               </div>
             </Alert>
           ))
         ) : (
-          <Card>
+          <Card className="p-4">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center">
-                <AlertTriangle className="mr-2 h-5 w-5 text-muted-foreground" />
+              <CardTitle className="flex items-center text-xl">
+                <AlertTriangle className="mr-2 h-6 w-6 text-muted-foreground" />
                 No alerts yet
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-base">
                 Donation alerts will appear here as they come in. When someone makes a donation, 
                 you'll see it instantly!
               </p>
