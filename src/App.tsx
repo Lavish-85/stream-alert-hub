@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import SetupPage from "./pages/SetupPage";
 import AlertsPage from "./pages/AlertsPage";
+import LiveAlertsPage from "./pages/LiveAlertsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
@@ -23,6 +24,7 @@ const App = () => (
           <Route element={<Layout />}>
             <Route path="/" element={<SetupPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/live-alerts" element={<LiveAlertsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

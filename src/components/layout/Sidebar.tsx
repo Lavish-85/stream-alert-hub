@@ -9,7 +9,8 @@ import {
   PieChart, 
   Settings, 
   Menu, 
-  X 
+  X,
+  Radio
 } from "lucide-react";
 
 interface SidebarProps {
@@ -23,6 +24,7 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
   const links = [
     { name: "Setup", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
     { name: "Alerts", path: "/alerts", icon: <Bell className="h-5 w-5" /> },
+    { name: "Live Alerts", path: "/live-alerts", icon: <Radio className="h-5 w-5" /> },
     { name: "Analytics", path: "/analytics", icon: <PieChart className="h-5 w-5" /> },
     { name: "Settings", path: "/settings", icon: <Settings className="h-5 w-5" /> },
   ];
