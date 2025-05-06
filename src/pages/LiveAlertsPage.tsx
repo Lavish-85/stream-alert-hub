@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -25,27 +26,63 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const { activeStyle, refreshStyles } = useAlertStyle();
+  const [renderKey, setRenderKey] = useState(Date.now());
   
-  // Add a unique key to force re-render when the style changes
-  const [styleKey, setStyleKey] = useState(Date.now());
-
   // Extract query parameters to check if we're in OBS mode
   const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
   console.log("Current active style:", activeStyle);
   console.log("Current OBS mode:", isOBSMode);
 
-  // Update the key whenever activeStyle changes to force re-render
+  // Force refresh the component when URL parameters change
   useEffect(() => {
-    setStyleKey(Date.now());
-    console.log("Style key updated to:", styleKey);
-    
-    // In OBS mode, add event listeners for style changes
+    const handleURLChange = () => {
+      setRenderKey(Date.now());
+      console.log("URL changed, updating component with key:", renderKey);
+    };
+
+    window.addEventListener('popstate', handleURLChange);
+    return () => window.removeEventListener('popstate', handleURLChange);
+  }, []);
+  
+  // Force refresh styles on mount and when in OBS mode
+  useEffect(() => {
     if (isOBSMode) {
-      // Force refresh styles to get the latest
+      console.log("In OBS mode, refreshing styles");
       refreshStyles();
+      
+      // Add meta tags to prevent caching
+      const addNoCacheMetaTags = () => {
+        // Remove any existing cache-control meta tags
+        const existingMetaTags = document.head.querySelectorAll('meta[http-equiv="Cache-Control"], meta[http-equiv="Pragma"], meta[http-equiv="Expires"]');
+        existingMetaTags.forEach(tag => tag.remove());
+        
+        // Add new cache-control meta tags
+        const cacheControlMeta = document.createElement('meta');
+        cacheControlMeta.setAttribute('http-equiv', 'Cache-Control');
+        cacheControlMeta.setAttribute('content', 'no-cache, no-store, must-revalidate');
+        document.head.appendChild(cacheControlMeta);
+        
+        const pragmaMeta = document.createElement('meta');
+        pragmaMeta.setAttribute('http-equiv', 'Pragma');
+        pragmaMeta.setAttribute('content', 'no-cache');
+        document.head.appendChild(pragmaMeta);
+        
+        const expiresMeta = document.createElement('meta');
+        expiresMeta.setAttribute('http-equiv', 'Expires');
+        expiresMeta.setAttribute('content', '0');
+        document.head.appendChild(expiresMeta);
+      };
+      
+      addNoCacheMetaTags();
     }
-  }, [activeStyle, isOBSMode, refreshStyles]);
+  }, [isOBSMode, refreshStyles, renderKey]);
+
+  // Update key when activeStyle changes to force re-render
+  useEffect(() => {
+    setRenderKey(Date.now());
+    console.log("Style changed, setting new key:", Date.now());
+  }, [activeStyle]);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -99,30 +136,6 @@ const LiveAlertsPage = () => {
         }
       });
       
-    // Listen for style changes in real-time
-    const styleChannel = supabase
-      .channel('styles-channel')
-      .on('postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'alert_styles',
-          filter: 'is_active=eq.true'
-        }, 
-        () => {
-          console.log('Active style changed, refreshing component');
-          refreshStyles();
-          setStyleKey(Date.now());
-          
-          if (isOBSMode) {
-            // Force reload for OBS mode
-            console.log("Forcing reload for OBS mode");
-            window.location.reload();
-          }
-        }
-      )
-      .subscribe();
-
     // Fetch the initial 20 most recent donations
     const fetchRecentDonations = async () => {
       const { data, error } = await supabase
@@ -146,9 +159,8 @@ const LiveAlertsPage = () => {
     // Cleanup on unmount
     return () => {
       channel.unsubscribe();
-      styleChannel.unsubscribe();
     };
-  }, [activeStyle?.duration, isOBSMode, refreshStyles]);
+  }, [activeStyle?.duration, isOBSMode]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -201,39 +213,7 @@ const LiveAlertsPage = () => {
     const alertStyle = activeStyle || getFallbackStyle();
     
     console.log("Using alert style in OBS mode:", alertStyle);
-    console.log("OBS mode key:", styleKey);
-    
-    // Add meta tags to prevent caching
-    useEffect(() => {
-      // Add meta tags to prevent caching
-      const addNoCacheMetaTags = () => {
-        // Remove any existing cache-control meta tags
-        const existingMetaTags = document.head.querySelectorAll('meta[http-equiv="Cache-Control"], meta[http-equiv="Pragma"], meta[http-equiv="Expires"]');
-        existingMetaTags.forEach(tag => tag.remove());
-        
-        // Add new cache-control meta tags
-        const cacheControlMeta = document.createElement('meta');
-        cacheControlMeta.setAttribute('http-equiv', 'Cache-Control');
-        cacheControlMeta.setAttribute('content', 'no-cache, no-store, must-revalidate');
-        document.head.appendChild(cacheControlMeta);
-        
-        const pragmaMeta = document.createElement('meta');
-        pragmaMeta.setAttribute('http-equiv', 'Pragma');
-        pragmaMeta.setAttribute('content', 'no-cache');
-        document.head.appendChild(pragmaMeta);
-        
-        const expiresMeta = document.createElement('meta');
-        expiresMeta.setAttribute('http-equiv', 'Expires');
-        expiresMeta.setAttribute('content', '0');
-        document.head.appendChild(expiresMeta);
-      };
-      
-      addNoCacheMetaTags();
-      
-      if (isOBSMode) {
-        console.log("Style changed in OBS mode, updating view...");
-      }
-    }, []);
+    console.log("OBS mode key:", renderKey);
     
     return (
       <div 
@@ -245,7 +225,7 @@ const LiveAlertsPage = () => {
           overflow: 'hidden',
           position: 'relative'
         }}
-        key={styleKey} // Add key to force re-render when style changes
+        key={renderKey} // Add key to force re-render when style changes
       >
         {lastAlert && (
           <div 
@@ -285,6 +265,7 @@ const LiveAlertsPage = () => {
     );
   }
 
+  // Normal page view (non-OBS mode)
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -340,7 +321,7 @@ const LiveAlertsPage = () => {
                 <li>In OBS Studio, add a new "Browser" source</li>
                 <li>Paste the URL above into the URL field</li>
                 <li>Set the width to 1280 and height to 720</li>
-                <li className="font-medium text-primary">Check "Shutdown source when not visible" and "Refresh browser when scene becomes active"</li>
+                <li className="font-medium text-red-600">Check "Shutdown source when not visible" and "Refresh browser when scene becomes active"</li>
                 <li>Click OK to save</li>
               </ol>
             </div>

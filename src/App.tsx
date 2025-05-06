@@ -52,6 +52,8 @@ const CachePrevention = () => {
         expiresMeta.setAttribute('http-equiv', 'Expires');
         expiresMeta.setAttribute('content', '0');
         document.head.appendChild(expiresMeta);
+        
+        console.log("Added no-cache headers for OBS mode");
       };
       
       addNoCacheMetaTags();
@@ -69,9 +71,11 @@ const StyleChangeListener = () => {
   
   useEffect(() => {
     if (isOBSMode) {
+      console.log("Setting up style change listener for OBS mode");
+      
       // Listen for style changes in the database
       const channel = supabase
-        .channel('public:alert_styles')
+        .channel('style-changes')
         .on('postgres_changes', 
           { 
             event: 'UPDATE', 
@@ -80,27 +84,33 @@ const StyleChangeListener = () => {
             filter: 'is_active=eq.true'
           }, 
           () => {
-            console.log('Active style changed, refreshing OBS view');
+            console.log('Active style changed, forcing OBS refresh');
+            
             // Force refresh by updating URL with a new timestamp
             const currentPath = location.pathname;
             const searchParams = new URLSearchParams(location.search);
             searchParams.set('t', Date.now().toString());
+            searchParams.set('r', Math.random().toString(36).substring(2, 9)); // Add random value
             searchParams.set('obs', 'true');
             
-            // Use navigate to refresh with new search params
+            // Navigate to force refresh with new URL params
             navigate(`${currentPath}?${searchParams.toString()}`, { replace: true });
             
-            // Force reload as backup method
+            // Force reload as a reliable fallback
             setTimeout(() => {
               if (isOBSMode) {
+                console.log("Forcing window reload");
                 window.location.reload();
               }
             }, 100);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Style change listener status:", status);
+        });
       
       return () => {
+        console.log("Removing style change listener");
         supabase.removeChannel(channel);
       };
     }
@@ -112,13 +122,15 @@ const StyleChangeListener = () => {
 const App = () => {
   // Check if we're in OBS mode
   const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
-  // Add a key to force re-render on OBS mode
-  const [obsKey, setObsKey] = useState(Date.now());
+  // Add a key to force re-render on OBS mode with timestamp
+  const [obsKey, setObsKey] = useState(() => Date.now() + Math.random());
 
   // Force re-render on URL change for OBS mode
   useEffect(() => {
     if (isOBSMode) {
-      setObsKey(Date.now());
+      const newKey = Date.now() + Math.random();
+      console.log("Setting new OBS key:", newKey);
+      setObsKey(newKey);
     }
   }, [isOBSMode, window.location.search]);
 

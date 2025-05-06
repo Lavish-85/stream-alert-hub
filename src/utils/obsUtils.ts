@@ -5,8 +5,8 @@
  */
 export const getOBSUrl = () => {
   const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-  // Use a more specific timestamp with milliseconds for better uniqueness
-  return `${baseUrl}&t=${Date.now()}`;
+  // Add detailed timestamp with random value to completely prevent caching
+  return `${baseUrl}&t=${Date.now()}&r=${Math.random().toString(36).substring(2, 9)}`;
 };
 
 /**
@@ -23,6 +23,7 @@ export const copyToClipboard = (text: string, onSuccess?: () => void) => {
   navigator.clipboard.writeText(text)
     .then(() => {
       if (onSuccess) onSuccess();
+      console.log('Copied to clipboard:', text);
     })
     .catch(err => {
       console.error('Failed to copy text: ', err);

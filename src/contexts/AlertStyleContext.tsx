@@ -15,6 +15,7 @@ export interface AlertStyle {
   volume: number | null;
   duration: number | null;
   is_active: boolean | null;
+  created_at?: string;
   last_updated?: number;
 }
 
@@ -50,15 +51,21 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.log("Fetched alert styles:", data);
       
       if (data && data.length > 0) {
-        setAllStyles(data);
-        const active = data.find(style => style.is_active === true);
+        // Add timestamp to all styles to force cache invalidation
+        const stylesWithTimestamp = data.map(style => ({
+          ...style,
+          last_updated: Date.now()
+        }));
+        
+        setAllStyles(stylesWithTimestamp);
+        const active = stylesWithTimestamp.find(style => style.is_active === true);
         if (active) {
           console.log("Found active style:", active);
           setActiveStyleState(active);
         }
-        else if (data.length > 0) {
-          console.log("No active style found, using first style:", data[0]);
-          setActiveStyleState(data[0]);
+        else if (stylesWithTimestamp.length > 0) {
+          console.log("No active style found, using first style:", stylesWithTimestamp[0]);
+          setActiveStyleState(stylesWithTimestamp[0]);
         }
       } else {
         console.log("No styles found in database");
@@ -105,12 +112,6 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsLoading(true);
       console.log("Setting active style:", style);
       
-      // Add timestamp to style to force cache invalidation
-      const styleWithTimestamp = {
-        ...style,
-        last_updated: Date.now()
-      };
-      
       // First deactivate all styles
       await supabase
         .from('alert_styles')
@@ -120,16 +121,20 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Then activate the selected style
       const { error } = await supabase
         .from('alert_styles')
-        .update({ 
-          is_active: true,
-          last_updated: Date.now() // Add timestamp in database too
-        })
+        .update({ is_active: true })
         .eq('id', style.id);
       
       if (error) throw new Error(error.message);
       
+      // Update style with timestamp
+      const updatedStyle = {
+        ...style,
+        is_active: true,
+        last_updated: Date.now()
+      };
+      
       // Update local state
-      setActiveStyleState(styleWithTimestamp);
+      setActiveStyleState(updatedStyle);
       setAllStyles(prev => 
         prev.map(s => ({
           ...s,
@@ -148,6 +153,7 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
+      
       toast.error("Error updating style", {
         description: "Could not update alert style. Please try again."
       });
