@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -35,8 +34,12 @@ const LiveAlertsPage = () => {
   const obsUserId = urlParams.get('user_id');
   const userId = isOBSMode ? obsUserId : user?.id;
 
-  console.log("Current user ID:", userId);
-  console.log("Current active style:", activeStyle);
+  console.log("LiveAlertsPage - Mode:", isOBSMode ? "OBS" : "Normal");
+  console.log("LiveAlertsPage - User ID source:", isOBSMode ? "URL parameter" : "Auth context");
+  console.log("LiveAlertsPage - User ID:", userId);
+  console.log("LiveAlertsPage - OBS User ID from URL:", obsUserId);
+  console.log("LiveAlertsPage - Auth User ID:", user?.id);
+  console.log("LiveAlertsPage - Active style:", activeStyle);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -55,9 +58,11 @@ const LiveAlertsPage = () => {
   useEffect(() => {
     // Don't attempt to subscribe if no user ID is available
     if (!userId) {
-      console.log("No user ID available, skipping donation subscription");
+      console.log("LiveAlertsPage - No user ID available, skipping donation subscription");
       return;
     }
+
+    console.log("LiveAlertsPage - Setting up subscription for user:", userId);
 
     // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
@@ -71,7 +76,7 @@ const LiveAlertsPage = () => {
         }, 
         (payload) => {
           const newDonation = payload.new as Donation;
-          console.log('New donation received:', newDonation);
+          console.log('LiveAlertsPage - New donation received:', newDonation);
           
           // Add to alerts list
           setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
@@ -95,7 +100,7 @@ const LiveAlertsPage = () => {
         }
       )
       .subscribe((status) => {
-        console.log('Subscription status:', status);
+        console.log('LiveAlertsPage - Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           setConnected(true);
         } else {
@@ -107,6 +112,8 @@ const LiveAlertsPage = () => {
     const fetchRecentDonations = async () => {
       if (!userId) return;
       
+      console.log("LiveAlertsPage - Fetching recent donations for user:", userId);
+      
       const { data, error } = await supabase
         .from('donations')
         .select('*')
@@ -115,11 +122,12 @@ const LiveAlertsPage = () => {
         .limit(20);
       
       if (error) {
-        console.error('Error fetching recent donations:', error);
+        console.error('LiveAlertsPage - Error fetching recent donations:', error);
         return;
       }
       
       if (data) {
+        console.log('LiveAlertsPage - Fetched donations:', data.length);
         setAlerts(data);
       }
     };
@@ -128,9 +136,10 @@ const LiveAlertsPage = () => {
 
     // Cleanup on unmount
     return () => {
+      console.log("LiveAlertsPage - Cleaning up subscription");
       channel.unsubscribe();
     };
-  }, [userId, activeStyle?.duration]);
+  }, [userId, activeStyle?.duration, isOBSMode]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -161,14 +170,19 @@ const LiveAlertsPage = () => {
 
   // Generate OBS URL with timestamp to prevent caching
   const getOBSUrl = async () => {
-    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    let url = `${baseUrl}&t=${new Date().getTime()}`;
-    
-    if (user?.id) {
-      url += `&user_id=${user.id}`;
+    try {
+      const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+      let url = `${baseUrl}&t=${new Date().getTime()}`;
+      
+      if (user?.id) {
+        url += `&user_id=${user.id}`;
+      }
+      
+      return url;
+    } catch (error) {
+      console.error("Error generating OBS URL:", error);
+      return `${window.location.origin}/live-alerts?obs=true&t=${new Date().getTime()}`;
     }
-    
-    return url;
   };
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
@@ -184,7 +198,8 @@ const LiveAlertsPage = () => {
     
     const alertStyle = activeStyle || getFallbackStyle();
     
-    console.log("Using alert style in OBS mode:", alertStyle);
+    console.log("LiveAlertsPage - Using alert style in OBS mode:", alertStyle);
+    console.log("LiveAlertsPage - Last alert:", lastAlert);
     
     return (
       <div className="obs-container" style={{ 

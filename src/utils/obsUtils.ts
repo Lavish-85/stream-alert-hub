@@ -23,8 +23,9 @@ export const sendTestAlert = async () => {
       donor_name: "Test Donation",
       message: "This is a test donation alert.",
       user_id: user.id
-      // Removed is_test field as it doesn't exist in the database
     };
+
+    console.log("Sending test donation:", testDonation);
 
     // Insert the test donation into the database
     const { data, error } = await supabase
@@ -38,6 +39,7 @@ export const sendTestAlert = async () => {
       return { error };
     }
 
+    console.log("Test donation created successfully:", data);
     return { data };
   } catch (err) {
     console.error("Exception in sendTestAlert:", err);
@@ -47,20 +49,30 @@ export const sendTestAlert = async () => {
 
 /**
  * Generates an OBS URL with cache-busting parameters
+ * @returns Promise<string> The OBS URL with user ID if available
  */
-export const getOBSUrl = () => {
-  // Get the current user's ID if available
-  const getUserId = async () => {
+export const getOBSUrl = async () => {
+  try {
+    // Get the current user's ID
     const { data } = await supabase.auth.getUser();
-    return data.user?.id;
-  };
-
-  // Use the current user's ID as a parameter if available
-  return getUserId().then(userId => {
-    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    const timeParam = `t=${new Date().getTime()}`;
-    const userParam = userId ? `&user_id=${userId}` : '';
+    const userId = data.user?.id;
     
-    return `${baseUrl}&${timeParam}${userParam}`;
-  });
+    console.log("Getting OBS URL for user:", userId);
+    
+    const baseUrl = `${window.location.origin}/live-alerts`;
+    const obsParam = "obs=true";
+    const timeParam = `t=${new Date().getTime()}`;
+    const userParam = userId ? `user_id=${userId}` : '';
+    
+    // Construct the URL with proper query parameters
+    let url = `${baseUrl}?${obsParam}`;
+    url += `&${timeParam}`;
+    if (userParam) url += `&${userParam}`;
+    
+    console.log("Generated OBS URL:", url);
+    return url;
+  } catch (error) {
+    console.error("Error generating OBS URL:", error);
+    return `${window.location.origin}/live-alerts?obs=true&t=${new Date().getTime()}`;
+  }
 };

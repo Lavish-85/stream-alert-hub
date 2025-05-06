@@ -27,36 +27,26 @@ const queryClient = new QueryClient({
 });
 
 const App = () => {
-  // Check if we're in OBS mode
-  const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
-
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
           <AlertStyleProvider>
             <TooltipProvider>
-              {!isOBSMode && (
-                <>
-                  <Toaster />
-                  <Sonner />
-                </>
-              )}
               <Routes>
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
-                {/* OBS mode route bypasses Layout and auth */}
-                {isOBSMode && (
-                  <Route path="/live-alerts" element={<LiveAlertsPage />} />
-                )}
+                {/* OBS mode route - doesn't require auth or Layout */}
+                <Route path="/live-alerts" element={
+                  <LiveAlertsPage />
+                } />
                 
                 {/* Protected routes with Layout */}
                 <Route element={<ProtectedRoute />}>
                   <Route element={<Layout />}>
                     <Route path="/" element={<SetupPage />} />
                     <Route path="/alerts" element={<AlertsPage />} />
-                    {!isOBSMode && <Route path="/live-alerts" element={<LiveAlertsPage />} />}
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
@@ -64,6 +54,14 @@ const App = () => {
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
+
+              {/* Only render toasts when not in OBS mode */}
+              {!new URLSearchParams(window.location.search).get('obs') === true && (
+                <>
+                  <Toaster />
+                  <Sonner />
+                </>
+              )}
             </TooltipProvider>
           </AlertStyleProvider>
         </AuthProvider>
