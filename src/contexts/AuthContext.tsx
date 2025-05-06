@@ -9,6 +9,8 @@ export type Profile = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  streamer_name?: string | null;
+  channel_link?: string | null;
 };
 
 interface AuthContextType {
@@ -17,7 +19,7 @@ interface AuthContextType {
   profile: Profile | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, metadata?: Record<string, any>) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
@@ -139,7 +141,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   // Sign up with email and password
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, metadata: Record<string, any> = {}) => {
     try {
       setIsLoading(true);
       
@@ -149,6 +151,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const { error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: metadata
+        }
       });
 
       if (error) throw error;

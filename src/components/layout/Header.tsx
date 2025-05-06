@@ -43,7 +43,7 @@ const Header = ({ setIsMobileOpen }: HeaderProps) => {
           <span className="font-bold text-lg">StreamDonate</span>
         </div>
       </div>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center">
         <UserMenu />
       </div>
     </header>

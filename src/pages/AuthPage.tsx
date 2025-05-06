@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Zap } from "lucide-react";
+import { Loader2, Zap, Link } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const AuthPage = () => {
@@ -16,13 +16,18 @@ const AuthPage = () => {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [streamerName, setStreamerName] = useState("");
+  const [channelLink, setChannelLink] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "signin") {
       await signIn(email, password);
     } else {
-      await signUp(email, password);
+      await signUp(email, password, {
+        streamer_name: streamerName,
+        channel_link: channelLink
+      });
     }
   };
 
@@ -90,6 +95,38 @@ const AuthPage = () => {
                   required
                 />
               </div>
+              
+              {mode === "signup" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="streamerName">Streamer Name</Label>
+                    <Input
+                      id="streamerName"
+                      type="text"
+                      placeholder="Your streamer name"
+                      value={streamerName}
+                      onChange={(e) => setStreamerName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="channelLink">
+                      <div className="flex items-center gap-1">
+                        <Link size={14} />
+                        <span>Channel Link</span>
+                      </div>
+                    </Label>
+                    <Input
+                      id="channelLink"
+                      type="url"
+                      placeholder="https://twitch.tv/yourusername"
+                      value={channelLink}
+                      onChange={(e) => setChannelLink(e.target.value)}
+                      required
+                    />
+                  </div>
+                </>
+              )}
             </CardContent>
             <CardFooter className="flex-col space-y-4">
               <Button
