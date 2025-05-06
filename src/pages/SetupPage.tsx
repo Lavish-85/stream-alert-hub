@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   Card,
@@ -30,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl } from "@/utils/obsUtils";
 
 const SetupPage = () => {
   const { toast } = useToast();
@@ -89,8 +88,10 @@ const SetupPage = () => {
       if (error) {
         console.error("Test alert error:", error);
         setConnectionStatus("error");
-        toast.error("Connection failed", {
+        toast({
+          title: "Connection failed",
           description: "Could not send test alert. Please check your setup.",
+          variant: "destructive",
         });
       } else {
         setConnectionStatus("success");
@@ -102,8 +103,10 @@ const SetupPage = () => {
     } catch (err) {
       console.error("Test connection error:", err);
       setConnectionStatus("error");
-      toast.error("Connection failed", {
+      toast({
+        title: "Connection failed",
         description: "Could not send test alert. Please check your setup.",
+        variant: "destructive",
       });
     } finally {
       setIsTestingConnection(false);

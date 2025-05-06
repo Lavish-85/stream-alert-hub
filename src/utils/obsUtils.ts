@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { v4 as uuidv4 } from "@/lib/utils";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Sends a test alert to the OBS browser source
