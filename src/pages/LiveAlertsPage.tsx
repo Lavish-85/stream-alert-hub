@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -25,6 +24,8 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const { activeStyle } = useAlertStyle();
+
+  console.log("Current active style:", activeStyle);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -55,10 +56,13 @@ const LiveAlertsPage = () => {
           // Set as last alert to highlight it
           setLastAlert(newDonation);
           
-          // Show toast notification
-          toast(newDonation.donor_name + " donated " + formatIndianRupees(newDonation.amount), {
-            description: newDonation.message || "No message",
-          });
+          // Show toast notification if not in OBS mode
+          const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
+          if (!isOBSMode) {
+            toast(newDonation.donor_name + " donated " + formatIndianRupees(newDonation.amount), {
+              description: newDonation.message || "No message",
+            });
+          }
           
           // Reset last alert highlight after several seconds
           const duration = activeStyle?.duration || 5;
@@ -134,12 +138,18 @@ const LiveAlertsPage = () => {
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
-    // Apply the active style to the alerts
-    const alertStyle = activeStyle || {
+    // Get the default style if no activeStyle is set
+    const getFallbackStyle = (): Partial<AlertStyle> => ({
       background_color: "#ffffff",
       text_color: "#111827",
-      font_family: "system-ui"
-    };
+      font_family: "system-ui",
+      animation_type: "fade",
+      duration: 5
+    });
+    
+    const alertStyle = activeStyle || getFallbackStyle();
+    
+    console.log("Using alert style in OBS mode:", alertStyle);
     
     return (
       <div className="obs-container" style={{ 
@@ -150,22 +160,32 @@ const LiveAlertsPage = () => {
         position: 'relative'
       }}>
         {lastAlert && (
-          <div className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}>
+          <div 
+            className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
+            style={{
+              fontFamily: alertStyle.font_family || "inherit"
+            }}
+          >
             <Alert 
               className={cn("border-2 backdrop-blur-sm shadow-lg")}
               style={{
                 backgroundColor: `${alertStyle.background_color}${isOBSMode ? "E6" : ""}`, // E6 = 90% opacity
-                color: alertStyle.text_color,
-                fontFamily: alertStyle.font_family || "inherit"
+                color: alertStyle.text_color
               }}
             >
               <Bell className="h-6 w-6" style={{ color: alertStyle.text_color }} />
               <div className="w-full">
-                <AlertTitle className="text-lg font-bold" style={{ color: alertStyle.text_color }}>
+                <AlertTitle 
+                  className="text-lg font-bold" 
+                  style={{ color: alertStyle.text_color }}
+                >
                   {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
                 </AlertTitle>
                 {lastAlert.message && (
-                  <AlertDescription className="text-base mt-2" style={{ color: alertStyle.text_color }}>
+                  <AlertDescription 
+                    className="text-base mt-2" 
+                    style={{ color: alertStyle.text_color }}
+                  >
                     {lastAlert.message}
                   </AlertDescription>
                 )}

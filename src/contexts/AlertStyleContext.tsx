@@ -45,11 +45,21 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         
         if (error) throw new Error(error.message);
         
-        if (data) {
+        console.log("Fetched alert styles:", data);
+        
+        if (data && data.length > 0) {
           setAllStyles(data);
           const active = data.find(style => style.is_active === true);
-          if (active) setActiveStyleState(active);
-          else if (data.length > 0) setActiveStyleState(data[0]);
+          if (active) {
+            console.log("Found active style:", active);
+            setActiveStyleState(active);
+          }
+          else if (data.length > 0) {
+            console.log("No active style found, using first style:", data[0]);
+            setActiveStyleState(data[0]);
+          }
+        } else {
+          console.log("No styles found in database");
         }
       } catch (err) {
         console.error('Error fetching alert styles:', err);
@@ -66,6 +76,7 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const setActiveStyle = async (style: AlertStyle) => {
     try {
       setIsLoading(true);
+      console.log("Setting active style:", style);
       
       // First deactivate all styles
       await supabase
@@ -89,6 +100,8 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           is_active: s.id === style.id
         }))
       );
+      
+      console.log("Style activated successfully");
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
