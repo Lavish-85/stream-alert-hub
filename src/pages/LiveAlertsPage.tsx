@@ -8,7 +8,6 @@ import { Bell, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
-import { getOBSUrl, copyToClipboard } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -25,64 +24,9 @@ const LiveAlertsPage = () => {
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
-  const { activeStyle, refreshStyles } = useAlertStyle();
-  const [renderKey, setRenderKey] = useState(Date.now());
-  
-  // Extract query parameters to check if we're in OBS mode
-  const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
+  const { activeStyle } = useAlertStyle();
 
   console.log("Current active style:", activeStyle);
-  console.log("Current OBS mode:", isOBSMode);
-
-  // Force refresh the component when URL parameters change
-  useEffect(() => {
-    const handleURLChange = () => {
-      setRenderKey(Date.now());
-      console.log("URL changed, updating component with key:", renderKey);
-    };
-
-    window.addEventListener('popstate', handleURLChange);
-    return () => window.removeEventListener('popstate', handleURLChange);
-  }, []);
-  
-  // Force refresh styles on mount and when in OBS mode
-  useEffect(() => {
-    if (isOBSMode) {
-      console.log("In OBS mode, refreshing styles");
-      refreshStyles();
-      
-      // Add meta tags to prevent caching
-      const addNoCacheMetaTags = () => {
-        // Remove any existing cache-control meta tags
-        const existingMetaTags = document.head.querySelectorAll('meta[http-equiv="Cache-Control"], meta[http-equiv="Pragma"], meta[http-equiv="Expires"]');
-        existingMetaTags.forEach(tag => tag.remove());
-        
-        // Add new cache-control meta tags
-        const cacheControlMeta = document.createElement('meta');
-        cacheControlMeta.setAttribute('http-equiv', 'Cache-Control');
-        cacheControlMeta.setAttribute('content', 'no-cache, no-store, must-revalidate');
-        document.head.appendChild(cacheControlMeta);
-        
-        const pragmaMeta = document.createElement('meta');
-        pragmaMeta.setAttribute('http-equiv', 'Pragma');
-        pragmaMeta.setAttribute('content', 'no-cache');
-        document.head.appendChild(pragmaMeta);
-        
-        const expiresMeta = document.createElement('meta');
-        expiresMeta.setAttribute('http-equiv', 'Expires');
-        expiresMeta.setAttribute('content', '0');
-        document.head.appendChild(expiresMeta);
-      };
-      
-      addNoCacheMetaTags();
-    }
-  }, [isOBSMode, refreshStyles, renderKey]);
-
-  // Update key when activeStyle changes to force re-render
-  useEffect(() => {
-    setRenderKey(Date.now());
-    console.log("Style changed, setting new key:", Date.now());
-  }, [activeStyle]);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -114,6 +58,7 @@ const LiveAlertsPage = () => {
           setLastAlert(newDonation);
           
           // Show toast notification if not in OBS mode
+          const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
           if (!isOBSMode) {
             toast(newDonation.donor_name + " donated " + formatIndianRupees(newDonation.amount), {
               description: newDonation.message || "No message",
@@ -135,7 +80,7 @@ const LiveAlertsPage = () => {
           setConnected(false);
         }
       });
-      
+
     // Fetch the initial 20 most recent donations
     const fetchRecentDonations = async () => {
       const { data, error } = await supabase
@@ -160,7 +105,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [activeStyle?.duration, isOBSMode]);
+  }, [activeStyle?.duration]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -189,15 +134,14 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // Handle copying OBS URL to clipboard
-  const handleCopyOBSUrl = () => {
-    const url = getOBSUrl();
-    copyToClipboard(url, () => {
-      toast("Copied!", {
-        description: "OBS URL copied to clipboard"
-      });
-    });
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
   };
+
+  // Extract query parameters to check if we're in OBS mode
+  const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
@@ -213,20 +157,15 @@ const LiveAlertsPage = () => {
     const alertStyle = activeStyle || getFallbackStyle();
     
     console.log("Using alert style in OBS mode:", alertStyle);
-    console.log("OBS mode key:", renderKey);
     
     return (
-      <div 
-        className="obs-container" 
-        style={{ 
-          background: 'transparent',
-          width: '100vw',
-          height: '100vh',
-          overflow: 'hidden',
-          position: 'relative'
-        }}
-        key={renderKey} // Add key to force re-render when style changes
-      >
+      <div className="obs-container" style={{ 
+        background: 'transparent',
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
         {lastAlert && (
           <div 
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
@@ -265,7 +204,6 @@ const LiveAlertsPage = () => {
     );
   }
 
-  // Normal page view (non-OBS mode)
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -305,7 +243,12 @@ const LiveAlertsPage = () => {
                 />
                 <button 
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
-                  onClick={handleCopyOBSUrl}
+                  onClick={() => {
+                    navigator.clipboard.writeText(getOBSUrl());
+                    toast("Copied!", {
+                      description: "OBS URL copied to clipboard"
+                    });
+                  }}
                 >
                   Copy
                 </button>
@@ -316,12 +259,12 @@ const LiveAlertsPage = () => {
             </div>
 
             <div className="space-y-2">
-              <p className="font-medium">Important OBS Settings:</p>
+              <p className="font-medium">Instructions:</p>
               <ol className="list-decimal list-inside space-y-2">
                 <li>In OBS Studio, add a new "Browser" source</li>
                 <li>Paste the URL above into the URL field</li>
                 <li>Set the width to 1280 and height to 720</li>
-                <li className="font-medium text-red-600">Check "Shutdown source when not visible" and "Refresh browser when scene becomes active"</li>
+                <li>Enable "Refresh browser when scene becomes active"</li>
                 <li>Click OK to save</li>
               </ol>
             </div>

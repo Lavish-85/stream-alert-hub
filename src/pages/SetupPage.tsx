@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   Card,
@@ -28,17 +29,21 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { getOBSUrl, copyToClipboard } from "@/utils/obsUtils";
-import { toast } from "@/components/ui/sonner";
 
 const SetupPage = () => {
-  const { toast: hookToast } = useToast();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [upiId, setUpiId] = useState("");
   const [upiIdError, setUpiIdError] = useState("");
   const [kycStatus, setKycStatus] = useState<"pending" | "approved" | "none">("none");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
+
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
+  };
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -62,7 +67,7 @@ const SetupPage = () => {
   };
 
   const handleFileUpload = () => {
-    hookToast({
+    toast({
       title: "KYC documents uploaded",
       description: "We'll review your documents within 24 hours.",
     });
@@ -70,8 +75,10 @@ const SetupPage = () => {
   };
 
   const handleCopy = (text: string, message: string) => {
-    copyToClipboard(text, () => {
-      toast(message);
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copied!",
+      description: message,
     });
   };
 
@@ -79,47 +86,17 @@ const SetupPage = () => {
     setIsTestingConnection(true);
     setConnectionStatus("unknown");
     
-    // Simulate API call that tests the connection to OBS
+    // Simulate API call
     setTimeout(() => {
       setIsTestingConnection(false);
       setConnectionStatus("success");
-      toast("Connection successful!", {
+      toast({
+        title: "Connection successful!",
         description: "Your OBS browser source is ready to receive alerts.",
       });
     }, 1500);
   };
 
-  // Render OBS URL input with automatic refresh
-  const renderOBSUrlInput = () => {
-    return (
-      <div className="space-y-2">
-        <Label htmlFor="obs-url">OBS Browser Source URL</Label>
-        <div className="flex">
-          <Input
-            id="obs-url"
-            value={getOBSUrl()}
-            readOnly
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            className="ml-2"
-            onClick={() => handleCopy(
-              getOBSUrl(),
-              "OBS URL copied to clipboard"
-            )}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          This URL includes a timestamp parameter to ensure alerts update instantly when styles change
-        </p>
-      </div>
-    );
-  };
-
-  // ... keep existing code (render UI elements)
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Setup your donation page</h1>
@@ -276,15 +253,37 @@ const SetupPage = () => {
                   </div>
                 </TabsContent>
                 <TabsContent value="obs-link" className="space-y-4 pt-4">
-                  {/* Use the renderOBSUrlInput function */}
-                  {renderOBSUrlInput()}
+                  <div className="space-y-2">
+                    <Label htmlFor="obs-url">OBS Browser Source URL</Label>
+                    <div className="flex">
+                      <Input
+                        id="obs-url"
+                        value={getOBSUrl()}
+                        readOnly
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="ml-2"
+                        onClick={() => handleCopy(
+                          getOBSUrl(),
+                          "OBS URL copied to clipboard"
+                        )}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This URL includes a timestamp parameter to prevent caching when styles change
+                    </p>
+                  </div>
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>
                     <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
                       <li>In OBS, add a new "Browser Source"</li>
                       <li>Paste the URL above into the URL field</li>
                       <li>Set width to 1280 and height to 720</li>
-                      <li className="font-medium text-primary">Important: Check "Shutdown source when not visible" and "Refresh browser when scene becomes active"</li>
+                      <li>Check "Refresh browser when scene becomes active"</li>
                     </ol>
                   </div>
                 </TabsContent>

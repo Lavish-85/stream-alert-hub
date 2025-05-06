@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
@@ -15,8 +14,6 @@ export interface AlertStyle {
   volume: number | null;
   duration: number | null;
   is_active: boolean | null;
-  created_at?: string;
-  last_updated?: number;
 }
 
 interface AlertStyleContextType {
@@ -25,7 +22,6 @@ interface AlertStyleContextType {
   setActiveStyle: (style: AlertStyle) => Promise<void>;
   isLoading: boolean;
   error: Error | null;
-  refreshStyles: () => Promise<void>;
 }
 
 const AlertStyleContext = createContext<AlertStyleContextType | undefined>(undefined);
@@ -36,74 +32,44 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Function to fetch styles that can be called programmatically when needed
-  const fetchStyles = async () => {
-    try {
-      setIsLoading(true);
-      
-      const { data, error } = await supabase
-        .from('alert_styles')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw new Error(error.message);
-      
-      console.log("Fetched alert styles:", data);
-      
-      if (data && data.length > 0) {
-        // Add timestamp to all styles to force cache invalidation
-        const stylesWithTimestamp = data.map(style => ({
-          ...style,
-          last_updated: Date.now()
-        }));
+  // Fetch all styles and identify active one
+  useEffect(() => {
+    async function fetchStyles() {
+      try {
+        setIsLoading(true);
         
-        setAllStyles(stylesWithTimestamp);
-        const active = stylesWithTimestamp.find(style => style.is_active === true);
-        if (active) {
-          console.log("Found active style:", active);
-          setActiveStyleState(active);
+        const { data, error } = await supabase
+          .from('alert_styles')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) throw new Error(error.message);
+        
+        console.log("Fetched alert styles:", data);
+        
+        if (data && data.length > 0) {
+          setAllStyles(data);
+          const active = data.find(style => style.is_active === true);
+          if (active) {
+            console.log("Found active style:", active);
+            setActiveStyleState(active);
+          }
+          else if (data.length > 0) {
+            console.log("No active style found, using first style:", data[0]);
+            setActiveStyleState(data[0]);
+          }
+        } else {
+          console.log("No styles found in database");
         }
-        else if (stylesWithTimestamp.length > 0) {
-          console.log("No active style found, using first style:", stylesWithTimestamp[0]);
-          setActiveStyleState(stylesWithTimestamp[0]);
-        }
-      } else {
-        console.log("No styles found in database");
+      } catch (err) {
+        console.error('Error fetching alert styles:', err);
+        setError(err instanceof Error ? err : new Error('Failed to fetch alert styles'));
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.error('Error fetching alert styles:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch alert styles'));
-    } finally {
-      setIsLoading(false);
     }
-  };
 
-  // Call fetchStyles when component mounts
-  useEffect(() => {
     fetchStyles();
-  }, []);
-
-  // Set up real-time subscription for style changes
-  useEffect(() => {
-    const channel = supabase
-      .channel('public:alert_styles')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'alert_styles' 
-        }, 
-        (payload) => {
-          console.log('Alert style changed:', payload);
-          // Refresh styles when any change happens
-          fetchStyles();
-        }
-      )
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   // Update active style in database
@@ -126,20 +92,12 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       
       if (error) throw new Error(error.message);
       
-      // Update style with timestamp
-      const updatedStyle = {
-        ...style,
-        is_active: true,
-        last_updated: Date.now()
-      };
-      
       // Update local state
-      setActiveStyleState(updatedStyle);
+      setActiveStyleState(style);
       setAllStyles(prev => 
         prev.map(s => ({
           ...s,
-          is_active: s.id === style.id,
-          last_updated: s.id === style.id ? Date.now() : s.last_updated
+          is_active: s.id === style.id
         }))
       );
       
@@ -153,7 +111,6 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
-      
       toast.error("Error updating style", {
         description: "Could not update alert style. Please try again."
       });
@@ -162,20 +119,8 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
-  // Public method to refresh styles
-  const refreshStyles = async () => {
-    return fetchStyles();
-  };
-
   return (
-    <AlertStyleContext.Provider value={{ 
-      activeStyle, 
-      allStyles, 
-      setActiveStyle, 
-      isLoading, 
-      error,
-      refreshStyles
-    }}>
+    <AlertStyleContext.Provider value={{ activeStyle, allStyles, setActiveStyle, isLoading, error }}>
       {children}
     </AlertStyleContext.Provider>
   );
