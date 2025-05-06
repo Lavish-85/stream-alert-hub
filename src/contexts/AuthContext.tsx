@@ -135,6 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       toast("Error signing in", {
         description: error.message || "Please check your credentials and try again."
       });
+      throw error; // Rethrow so the component can handle it
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +149,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Clean up existing state first
       cleanupAuthState();
       
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -158,14 +159,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) throw error;
       
-      toast("Account created successfully", {
-        description: "Please check your email for a confirmation link."
-      });
+      // Check if user is already registered
+      if (data.user && data.user.identities?.length === 0) {
+        throw new Error("User already registered");
+      }
+      
+      // If signup successful and not in confirmation required mode
+      if (data.user && !data.session) {
+        toast("Account created successfully", {
+          description: "Please check your email for a confirmation link."
+        });
+      } else if (data.session) {
+        // If signup and auto-signin successful
+        toast("Account created successfully");
+        
+        // Update the profile with streamer information
+        if (data.user && (metadata.streamer_name || metadata.channel_link)) {
+          await supabase
+            .from("profiles")
+            .update({
+              streamer_name: metadata.streamer_name,
+              channel_link: metadata.channel_link
+            })
+            .eq("id", data.user.id);
+        }
+        
+        navigate('/');
+      }
     } catch (error: any) {
       console.error("Error signing up:", error);
+      
+      // Handle specific error messages
+      let errorMessage = error.message || "Please try again with a different email.";
+      
       toast("Error signing up", {
-        description: error.message || "Please try again with a different email."
+        description: errorMessage
       });
+      
+      throw error; // Rethrow so the component can handle it
     } finally {
       setIsLoading(false);
     }
@@ -180,7 +211,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       cleanupAuthState();
       
       // Attempt global sign out
-      await supabase.auth.signOut({ scope: 'global' });
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Ignore errors
+        console.error("Error during signout:", err);
+      }
       
       toast("Signed out successfully");
       navigate('/auth');

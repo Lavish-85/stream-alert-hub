@@ -3,7 +3,6 @@ import * as React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,16 +17,28 @@ const AuthPage = () => {
   const [password, setPassword] = useState("");
   const [streamerName, setStreamerName] = useState("");
   const [channelLink, setChannelLink] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "signin") {
-      await signIn(email, password);
-    } else {
-      await signUp(email, password, {
-        streamer_name: streamerName,
-        channel_link: channelLink
-      });
+    setErrorMessage("");
+    
+    try {
+      if (mode === "signin") {
+        await signIn(email, password);
+      } else {
+        await signUp(email, password, {
+          streamer_name: streamerName,
+          channel_link: channelLink
+        });
+      }
+    } catch (error: any) {
+      console.error("Auth error:", error);
+      if (error.message.includes("User already registered")) {
+        setErrorMessage("This email is already registered. Please sign in instead.");
+      } else {
+        setErrorMessage(error.message || "An error occurred during authentication");
+      }
     }
   };
 
@@ -59,6 +70,12 @@ const AuthPage = () => {
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
+              {errorMessage && (
+                <div className="p-3 rounded-md bg-destructive/15 text-destructive text-sm">
+                  {errorMessage}
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
