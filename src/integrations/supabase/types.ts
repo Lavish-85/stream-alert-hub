@@ -126,23 +126,29 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          channel_link: string | null
           created_at: string | null
           display_name: string | null
           id: string
+          streamer_name: string | null
           username: string
         }
         Insert: {
           avatar_url?: string | null
+          channel_link?: string | null
           created_at?: string | null
           display_name?: string | null
           id: string
+          streamer_name?: string | null
           username: string
         }
         Update: {
           avatar_url?: string | null
+          channel_link?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
+          streamer_name?: string | null
           username?: string
         }
         Relationships: []
