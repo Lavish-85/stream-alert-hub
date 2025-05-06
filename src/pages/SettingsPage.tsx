@@ -131,9 +131,9 @@ const SettingsPage = () => {
         avatar_url: avatarUrl 
       });
       
-      toast("Profile updated successfully");
+      toast.success("Profile updated successfully");
     } catch (error: any) {
-      toast("Error updating profile", {
+      toast.error("Error updating profile", {
         description: error.message
       });
     }
@@ -143,17 +143,15 @@ const SettingsPage = () => {
     e.preventDefault();
     
     if (newPassword !== confirmPassword) {
-      toast("Passwords do not match", {
-        description: "New password and confirmation must be identical.",
-        variant: "destructive",
+      toast.error("Passwords do not match", {
+        description: "New password and confirmation must be identical."
       });
       return;
     }
     
     if (newPassword.length < 8) {
-      toast("Password too short", {
-        description: "Password must be at least 8 characters long.",
-        variant: "destructive",
+      toast.error("Password too short", {
+        description: "Password must be at least 8 characters long."
       });
       return;
     }
@@ -165,17 +163,16 @@ const SettingsPage = () => {
       
       if (error) throw error;
       
-      toast("Password updated", {
-        description: "Your password has been changed successfully.",
+      toast.success("Password updated", {
+        description: "Your password has been changed successfully."
       });
       
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error: any) {
-      toast("Error updating password", {
-        description: error.message,
-        variant: "destructive",
+      toast.error("Error updating password", {
+        description: error.message
       });
     }
   };
@@ -204,22 +201,21 @@ const SettingsPage = () => {
   
   const handleCopyToken = (token: string) => {
     navigator.clipboard.writeText(token);
-    toast("API token copied", {
-      description: "The token has been copied to your clipboard.",
+    toast.success("API token copied", {
+      description: "The token has been copied to your clipboard."
     });
   };
   
   const handleGenerateToken = () => {
     if (!newTokenName) {
-      toast("Token name required", {
-        description: "Please provide a name for your new token.",
-        variant: "destructive",
+      toast.error("Token name required", {
+        description: "Please provide a name for your new token."
       });
       return;
     }
     
-    toast("New token generated", {
-      description: "Your API token has been created and copied to clipboard.",
+    toast.success("New token generated", {
+      description: "Your API token has been created and copied to clipboard."
     });
     
     setNewTokenName("");
@@ -235,13 +231,12 @@ const SettingsPage = () => {
       // Sign out the user after deletion
       await signOut();
       
-      toast("Account deleted", {
-        description: "Your account has been successfully deleted.",
+      toast.success("Account deleted", {
+        description: "Your account has been successfully deleted."
       });
     } catch (error: any) {
-      toast("Error deleting account", {
-        description: error.message || "Please try again later.",
-        variant: "destructive",
+      toast.error("Error deleting account", {
+        description: error.message || "Please try again later."
       });
     }
   };
@@ -254,10 +249,9 @@ const SettingsPage = () => {
       </p>
 
       <Tabs defaultValue="account" className="space-y-8">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-3 w-full">
+        <TabsList className="grid grid-cols-2 w-full">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
-          <TabsTrigger value="api">API Tokens</TabsTrigger>
         </TabsList>
 
         {/* Account Tab */}
@@ -604,97 +598,6 @@ const SettingsPage = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* API Tokens Tab */}
-        <TabsContent value="api">
-          <Card>
-            <CardHeader>
-              <CardTitle>API Tokens</CardTitle>
-              <CardDescription>
-                Manage tokens for API access to your StreamDonate account
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                {apiTokens.map((token) => (
-                  <div 
-                    key={token.id} 
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div className="space-y-1 mb-4 sm:mb-0">
-                      <div className="flex items-center">
-                        <h4 className="font-medium">{token.name}</h4>
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {new Date(token.createdAt).toLocaleDateString()}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center">
-                        <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
-                          {token.token.substring(0, 20)}...
-                        </code>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleCopyToken(token.token)} 
-                          className="h-6 w-6 ml-1"
-                        >
-                          <svg
-                            width="15"
-                            height="15"
-                            viewBox="0 0 15 15"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3 w-3"
-                          >
-                            <path
-                              d="M5 2V1H10V2H5ZM4.75 0C4.33579 0 4 0.335786 4 0.75V1H3.5C2.67157 1 2 1.67157 2 2.5V12.5C2 13.3284 2.67157 14 3.5 14H11.5C12.3284 14 13 13.3284 13 12.5V2.5C13 1.67157 12.3284 1 11.5 1H11V0.75C11 0.335786 10.6642 0 10.25 0H4.75ZM11 2V2.25C11 2.66421 10.6642 3 10.25 3H4.75C4.33579 3 4 2.66421 4 2.25V2H3.5C3.22386 2 3 2.22386 3 2.5V12.5C3 12.7761 3.22386 13 3.5 13H11.5C11.7761 13 12 12.7761 12 12.5V2.5C12 2.22386 11.7761 2 11.5 2H11Z"
-                              fill="currentColor"
-                              fillRule="evenodd"
-                              clipRule="evenodd"
-                            ></path>
-                          </svg>
-                          <span className="sr-only">Copy token</span>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
-                        <ShieldCheck className="h-4 w-4 mr-2" />
-                        Permissions
-                      </Button>
-                      <Button variant="destructive" size="sm">
-                        <Trash className="h-4 w-4 mr-2" />
-                        Revoke
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="border-t pt-6">
-                <h3 className="font-medium mb-4">Generate New Token</h3>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1">
-                    <Label htmlFor="token-name" className="sr-only">Token Name</Label>
-                    <Input
-                      id="token-name"
-                      placeholder="Token name (e.g. OBS Integration)"
-                      value={newTokenName}
-                      onChange={(e) => setNewTokenName(e.target.value)}
-                    />
-                  </div>
-                  <Button onClick={handleGenerateToken}>
-                    <Key className="h-4 w-4 mr-2" />
-                    Generate Token
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Tokens have full access to your account. Keep them secure!
-                </p>
               </div>
             </CardContent>
           </Card>
