@@ -22,6 +22,7 @@ export type Database = {
           name: string
           sound: string | null
           text_color: string
+          user_id: string | null
           volume: number | null
         }
         Insert: {
@@ -36,6 +37,7 @@ export type Database = {
           name: string
           sound?: string | null
           text_color: string
+          user_id?: string | null
           volume?: number | null
         }
         Update: {
@@ -50,6 +52,7 @@ export type Database = {
           name?: string
           sound?: string | null
           text_color?: string
+          user_id?: string | null
           volume?: number | null
         }
         Relationships: []
@@ -62,6 +65,7 @@ export type Database = {
           id: number
           message: string | null
           payment_id: string
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -70,6 +74,7 @@ export type Database = {
           id?: number
           message?: string | null
           payment_id: string
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -78,6 +83,7 @@ export type Database = {
           id?: number
           message?: string | null
           payment_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -91,6 +97,7 @@ export type Database = {
           message: string | null
           razorpay_order_id: string
           status: string | null
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -101,6 +108,7 @@ export type Database = {
           message?: string | null
           razorpay_order_id: string
           status?: string | null
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -111,6 +119,31 @@ export type Database = {
           message?: string | null
           razorpay_order_id?: string
           status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          id: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          username?: string
         }
         Relationships: []
       }
@@ -119,7 +152,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_current_user_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

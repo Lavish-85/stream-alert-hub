@@ -13,6 +13,9 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import { AlertStyleProvider } from "./contexts/AlertStyleContext";
+import { AuthProvider } from "./contexts/AuthContext";
+import AuthPage from "./pages/AuthPage";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,34 +32,42 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AlertStyleProvider>
-        <TooltipProvider>
-          {!isOBSMode && (
-            <>
-              <Toaster />
-              <Sonner />
-            </>
-          )}
-          <BrowserRouter>
-            <Routes>
-              {/* OBS mode route bypasses Layout */}
-              {isOBSMode && (
-                <Route path="/live-alerts" element={<LiveAlertsPage />} />
+      <BrowserRouter>
+        <AuthProvider>
+          <AlertStyleProvider>
+            <TooltipProvider>
+              {!isOBSMode && (
+                <>
+                  <Toaster />
+                  <Sonner />
+                </>
               )}
-              
-              {/* Regular routes with Layout */}
-              <Route element={<Layout />}>
-                <Route path="/" element={<SetupPage />} />
-                <Route path="/alerts" element={<AlertsPage />} />
-                {!isOBSMode && <Route path="/live-alerts" element={<LiveAlertsPage />} />}
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AlertStyleProvider>
+              <Routes>
+                {/* Public auth route */}
+                <Route path="/auth" element={<AuthPage />} />
+
+                {/* OBS mode route bypasses Layout and auth */}
+                {isOBSMode && (
+                  <Route path="/live-alerts" element={<LiveAlertsPage />} />
+                )}
+                
+                {/* Protected routes with Layout */}
+                <Route element={<ProtectedRoute />}>
+                  <Route element={<Layout />}>
+                    <Route path="/" element={<SetupPage />} />
+                    <Route path="/alerts" element={<AlertsPage />} />
+                    {!isOBSMode && <Route path="/live-alerts" element={<LiveAlertsPage />} />}
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                  </Route>
+                </Route>
+                
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </TooltipProvider>
+          </AlertStyleProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 };

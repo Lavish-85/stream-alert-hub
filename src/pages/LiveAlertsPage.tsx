@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -7,6 +8,7 @@ import { Bell, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -16,6 +18,7 @@ interface Donation {
   donor_name: string;
   message: string | null;
   created_at: string;
+  user_id: string | null;
   is_test?: boolean;
 }
 
@@ -25,7 +28,15 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const { activeStyle } = useAlertStyle();
+  const { user } = useAuth();
+  
+  // Get user ID from URL in OBS mode or from auth context
+  const urlParams = new URLSearchParams(window.location.search);
+  const isOBSMode = urlParams.get('obs') === 'true';
+  const obsUserId = urlParams.get('user_id');
+  const userId = isOBSMode ? obsUserId : user?.id;
 
+  console.log("Current user ID:", userId);
   console.log("Current active style:", activeStyle);
 
   // Format amount as Indian Rupees
@@ -38,14 +49,21 @@ const LiveAlertsPage = () => {
   };
 
   useEffect(() => {
-    // Subscribe to real-time updates for donations
+    // Don't attempt to subscribe if no user ID is available
+    if (!userId) {
+      console.log("No user ID available, skipping donation subscription");
+      return;
+    }
+
+    // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
       .channel('public:donations')
       .on('postgres_changes', 
         { 
           event: 'INSERT', 
           schema: 'public', 
-          table: 'donations' 
+          table: 'donations',
+          filter: `user_id=eq.${userId}`
         }, 
         (payload) => {
           const newDonation = payload.new as Donation;
@@ -58,7 +76,6 @@ const LiveAlertsPage = () => {
           setLastAlert(newDonation);
           
           // Show toast notification if not in OBS mode
-          const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
           if (!isOBSMode) {
             const isTest = newDonation.is_test ? " (Test)" : "";
             toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
@@ -82,11 +99,14 @@ const LiveAlertsPage = () => {
         }
       });
 
-    // Fetch the initial 20 most recent donations
+    // Fetch the initial 20 most recent donations for this user
     const fetchRecentDonations = async () => {
+      if (!userId) return;
+      
       const { data, error } = await supabase
         .from('donations')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
       
@@ -106,7 +126,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [activeStyle?.duration]);
+  }, [userId, activeStyle?.duration]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -136,13 +156,16 @@ const LiveAlertsPage = () => {
   };
 
   // Generate OBS URL with timestamp to prevent caching
-  const getOBSUrl = () => {
+  const getOBSUrl = async () => {
     const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    return `${baseUrl}&t=${new Date().getTime()}`;
+    let url = `${baseUrl}&t=${new Date().getTime()}`;
+    
+    if (user?.id) {
+      url += `&user_id=${user.id}`;
+    }
+    
+    return url;
   };
-
-  // Extract query parameters to check if we're in OBS mode
-  const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
@@ -240,13 +263,14 @@ const LiveAlertsPage = () => {
                 <input
                   type="text"
                   readOnly
-                  value={getOBSUrl()}
+                  value={userId ? `${window.location.origin}/live-alerts?obs=true&user_id=${userId}` : "Loading..."}
                   className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
                 />
                 <button 
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
-                  onClick={() => {
-                    navigator.clipboard.writeText(getOBSUrl());
+                  onClick={async () => {
+                    const url = await getOBSUrl();
+                    navigator.clipboard.writeText(url);
                     toast("Copied!", {
                       description: "OBS URL copied to clipboard"
                     });
@@ -256,7 +280,7 @@ const LiveAlertsPage = () => {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This URL includes a timestamp parameter to prevent caching when styles change
+                This URL includes your unique user ID to ensure you only see your own donation alerts
               </p>
             </div>
 
