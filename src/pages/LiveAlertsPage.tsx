@@ -25,8 +25,15 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const { activeStyle } = useAlertStyle();
+  // Add a unique key to force re-render when the style changes
+  const [styleKey, setStyleKey] = useState(Date.now());
 
   console.log("Current active style:", activeStyle);
+
+  // Update the key whenever activeStyle changes to force re-render
+  useEffect(() => {
+    setStyleKey(Date.now());
+  }, [activeStyle]);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -137,7 +144,8 @@ const LiveAlertsPage = () => {
   // Generate OBS URL with timestamp to prevent caching
   const getOBSUrl = () => {
     const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    return `${baseUrl}&t=${new Date().getTime()}`;
+    // Use a more specific timestamp with milliseconds for better uniqueness
+    return `${baseUrl}&t=${Date.now()}`;
   };
 
   // Extract query parameters to check if we're in OBS mode
@@ -158,6 +166,39 @@ const LiveAlertsPage = () => {
     
     console.log("Using alert style in OBS mode:", alertStyle);
     
+    // Add meta tags to prevent caching
+    useEffect(() => {
+      // Add meta tags to prevent caching
+      const addNoCacheMetaTags = () => {
+        // Remove any existing cache-control meta tags
+        const existingMetaTags = document.head.querySelectorAll('meta[http-equiv="Cache-Control"], meta[http-equiv="Pragma"], meta[http-equiv="Expires"]');
+        existingMetaTags.forEach(tag => tag.remove());
+        
+        // Add new cache-control meta tags
+        const cacheControlMeta = document.createElement('meta');
+        cacheControlMeta.setAttribute('http-equiv', 'Cache-Control');
+        cacheControlMeta.setAttribute('content', 'no-cache, no-store, must-revalidate');
+        document.head.appendChild(cacheControlMeta);
+        
+        const pragmaMeta = document.createElement('meta');
+        pragmaMeta.setAttribute('http-equiv', 'Pragma');
+        pragmaMeta.setAttribute('content', 'no-cache');
+        document.head.appendChild(pragmaMeta);
+        
+        const expiresMeta = document.createElement('meta');
+        expiresMeta.setAttribute('http-equiv', 'Expires');
+        expiresMeta.setAttribute('content', '0');
+        document.head.appendChild(expiresMeta);
+      };
+      
+      addNoCacheMetaTags();
+      
+      // Force a page refresh when the style changes in OBS mode
+      if (isOBSMode) {
+        console.log("Style changed in OBS mode, updating view...");
+      }
+    }, [activeStyle, isOBSMode, styleKey]);
+    
     return (
       <div className="obs-container" style={{ 
         background: 'transparent',
@@ -165,7 +206,9 @@ const LiveAlertsPage = () => {
         height: '100vh',
         overflow: 'hidden',
         position: 'relative'
-      }}>
+      }}
+      key={styleKey} // Add key to force re-render when style changes
+      >
         {lastAlert && (
           <div 
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}

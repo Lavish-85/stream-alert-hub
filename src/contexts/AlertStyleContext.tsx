@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
@@ -14,6 +15,7 @@ export interface AlertStyle {
   volume: number | null;
   duration: number | null;
   is_active: boolean | null;
+  last_updated?: number;
 }
 
 interface AlertStyleContextType {
@@ -78,6 +80,12 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsLoading(true);
       console.log("Setting active style:", style);
       
+      // Add timestamp to style to force cache invalidation
+      const styleWithTimestamp = {
+        ...style,
+        last_updated: Date.now()
+      };
+      
       // First deactivate all styles
       await supabase
         .from('alert_styles')
@@ -87,17 +95,21 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Then activate the selected style
       const { error } = await supabase
         .from('alert_styles')
-        .update({ is_active: true })
+        .update({ 
+          is_active: true,
+          last_updated: Date.now() // Add timestamp in database too
+        })
         .eq('id', style.id);
       
       if (error) throw new Error(error.message);
       
       // Update local state
-      setActiveStyleState(style);
+      setActiveStyleState(styleWithTimestamp);
       setAllStyles(prev => 
         prev.map(s => ({
           ...s,
-          is_active: s.id === style.id
+          is_active: s.id === style.id,
+          last_updated: s.id === style.id ? Date.now() : s.last_updated
         }))
       );
       

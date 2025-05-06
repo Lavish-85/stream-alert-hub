@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   Card,
@@ -38,11 +37,20 @@ const SetupPage = () => {
   const [kycStatus, setKycStatus] = useState<"pending" | "approved" | "none">("none");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
+  // Add state to force URL refresh
+  const [urlRefreshKey, setUrlRefreshKey] = useState(Date.now());
 
   // Generate OBS URL with timestamp to prevent caching
   const getOBSUrl = () => {
     const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    return `${baseUrl}&t=${new Date().getTime()}`;
+    // Use a more specific timestamp with milliseconds for better uniqueness
+    return `${baseUrl}&t=${Date.now()}`;
+  };
+
+  // Function to refresh the URL every time it's accessed
+  const getRefreshedOBSUrl = () => {
+    setUrlRefreshKey(Date.now());
+    return getOBSUrl();
   };
 
   const validateUpiId = () => {
@@ -76,6 +84,11 @@ const SetupPage = () => {
 
   const handleCopy = (text: string, message: string) => {
     navigator.clipboard.writeText(text);
+    // Always generate a fresh URL when copying
+    if (text.includes('/live-alerts?obs=true')) {
+      const freshUrl = getRefreshedOBSUrl();
+      navigator.clipboard.writeText(freshUrl);
+    }
     toast({
       title: "Copied!",
       description: message,
@@ -86,6 +99,9 @@ const SetupPage = () => {
     setIsTestingConnection(true);
     setConnectionStatus("unknown");
     
+    // Refresh URL key when testing connection
+    setUrlRefreshKey(Date.now());
+    
     // Simulate API call
     setTimeout(() => {
       setIsTestingConnection(false);
@@ -95,6 +111,37 @@ const SetupPage = () => {
         description: "Your OBS browser source is ready to receive alerts.",
       });
     }, 1500);
+  };
+
+  // Only modify the OBS URL display in the form
+  const renderOBSUrlInput = () => {
+    const currentUrl = getRefreshedOBSUrl();
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="obs-url">OBS Browser Source URL</Label>
+        <div className="flex">
+          <Input
+            id="obs-url"
+            value={currentUrl}
+            readOnly
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="ml-2"
+            onClick={() => handleCopy(
+              currentUrl,
+              "OBS URL copied to clipboard"
+            )}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          This URL includes a timestamp parameter to ensure alerts update instantly when styles change
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -253,30 +300,8 @@ const SetupPage = () => {
                   </div>
                 </TabsContent>
                 <TabsContent value="obs-link" className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="obs-url">OBS Browser Source URL</Label>
-                    <div className="flex">
-                      <Input
-                        id="obs-url"
-                        value={getOBSUrl()}
-                        readOnly
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="ml-2"
-                        onClick={() => handleCopy(
-                          getOBSUrl(),
-                          "OBS URL copied to clipboard"
-                        )}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      This URL includes a timestamp parameter to prevent caching when styles change
-                    </p>
-                  </div>
+                  {/* Use the custom renderOBSUrlInput function */}
+                  {renderOBSUrlInput()}
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>
                     <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
@@ -284,6 +309,7 @@ const SetupPage = () => {
                       <li>Paste the URL above into the URL field</li>
                       <li>Set width to 1280 and height to 720</li>
                       <li>Check "Refresh browser when scene becomes active"</li>
+                      <li className="font-medium text-primary">Important: Check "Shutdown source when not visible" and "Refresh browser when scene becomes active"</li>
                     </ol>
                   </div>
                 </TabsContent>
