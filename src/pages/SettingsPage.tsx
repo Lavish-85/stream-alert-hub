@@ -1,5 +1,6 @@
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,7 +13,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,33 +26,32 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   CreditCard,
-  Copy,
   Save,
   Trash,
-  Link,
-  Mail,
-  Bell,
   Key,
   ShieldCheck,
+  Upload,
+  User,
   Plus,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { supabase } from "@/integrations/supabase/client";
 
 const SettingsPage = () => {
-  const { toast } = useToast();
+  const { profile, user, updateProfile, signOut } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("https://discord.com/api/webhooks/12345");
-  
-  const [notificationPreferences, setNotificationPreferences] = useState({
-    email: true,
-    push: false,
-    discord: true,
-    webhook: false,
-  });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(profile?.avatar_url || null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [apiTokens] = useState([
     {
@@ -71,12 +70,80 @@ const SettingsPage = () => {
   
   const [newTokenName, setNewTokenName] = useState("");
   
-  const handlePasswordChange = (e: React.FormEvent) => {
+  // Form schema for profile update
+  const profileFormSchema = z.object({
+    display_name: z.string().min(2, "Display name must be at least 2 characters."),
+    streamer_name: z.string().optional(),
+    channel_link: z.string().url("Must be a valid URL").or(z.string().length(0)).optional(),
+  });
+  
+  // Initialize form with profile data
+  const profileForm = useForm({
+    resolver: zodResolver(profileFormSchema),
+    defaultValues: {
+      display_name: profile?.display_name || "",
+      streamer_name: profile?.streamer_name || "",
+      channel_link: profile?.channel_link || "",
+    },
+  });
+
+  // Update form when profile data changes
+  React.useEffect(() => {
+    if (profile) {
+      profileForm.reset({
+        display_name: profile.display_name || "",
+        streamer_name: profile.streamer_name || "",
+        channel_link: profile.channel_link || "",
+      });
+    }
+  }, [profile]);
+  
+  const handleProfileUpdate = async (data: z.infer<typeof profileFormSchema>) => {
+    try {
+      let avatarUrl = profile?.avatar_url;
+      
+      // Upload new avatar if selected
+      if (selectedFile && user) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const filePath = `${user.id}-${Math.random()}.${fileExt}`;
+        
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, selectedFile);
+          
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+          
+        avatarUrl = publicUrl;
+      }
+      
+      // Update profile
+      await updateProfile({ 
+        display_name: data.display_name,
+        streamer_name: data.streamer_name,
+        channel_link: data.channel_link,
+        avatar_url: avatarUrl 
+      });
+      
+      toast("Profile updated successfully");
+    } catch (error: any) {
+      toast("Error updating profile", {
+        description: error.message
+      });
+    }
+  };
+  
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Passwords do not match",
+      toast("Passwords do not match", {
         description: "New password and confirmation must be identical.",
         variant: "destructive",
       });
@@ -84,307 +151,205 @@ const SettingsPage = () => {
     }
     
     if (newPassword.length < 8) {
-      toast({
-        title: "Password too short",
+      toast("Password too short", {
         description: "Password must be at least 8 characters long.",
         variant: "destructive",
       });
       return;
     }
     
-    toast({
-      title: "Password updated",
-      description: "Your password has been changed successfully.",
-    });
-    
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      
+      if (error) throw error;
+      
+      toast("Password updated", {
+        description: "Your password has been changed successfully.",
+      });
+      
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      toast("Error updating password", {
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
   
-  const handleToggleNotification = (key: keyof typeof notificationPreferences) => {
-    setNotificationPreferences({
-      ...notificationPreferences,
-      [key]: !notificationPreferences[key],
-    });
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      setSelectedFile(null);
+      return;
+    }
     
-    toast({
-      title: "Notification preferences updated",
-      description: `${key.charAt(0).toUpperCase() + key.slice(1)} notifications ${!notificationPreferences[key] ? 'enabled' : 'disabled'}.`,
-    });
+    const file = e.target.files[0];
+    setSelectedFile(file);
+    
+    // Create image preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    
+    return () => URL.revokeObjectURL(objectUrl);
   };
   
-  const handleSaveWebhook = () => {
-    toast({
-      title: "Webhook URL saved",
-      description: "Your custom webhook has been configured.",
-    });
+  const handleAvatarClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
   
   const handleCopyToken = (token: string) => {
     navigator.clipboard.writeText(token);
-    toast({
-      title: "API token copied",
+    toast("API token copied", {
       description: "The token has been copied to your clipboard.",
     });
   };
   
   const handleGenerateToken = () => {
     if (!newTokenName) {
-      toast({
-        title: "Token name required",
+      toast("Token name required", {
         description: "Please provide a name for your new token.",
         variant: "destructive",
       });
       return;
     }
     
-    toast({
-      title: "New token generated",
+    toast("New token generated", {
       description: "Your API token has been created and copied to clipboard.",
     });
     
     setNewTokenName("");
   };
   
-  const handleDeleteAccount = () => {
-    toast({
-      title: "Account deletion initiated",
-      description: "We've sent a confirmation email. Please follow instructions to complete the process.",
-      duration: 5000,
-    });
+  const handleDeleteAccount = async () => {
+    try {
+      // Attempt to delete the user's account
+      const { error } = await supabase.auth.admin.deleteUser(user?.id || "");
+      
+      if (error) throw error;
+      
+      // Sign out the user after deletion
+      await signOut();
+      
+      toast("Account deleted", {
+        description: "Your account has been successfully deleted.",
+      });
+    } catch (error: any) {
+      toast("Error deleting account", {
+        description: error.message || "Please try again later.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
       <p className="text-muted-foreground mb-6">
-        Manage your account, notifications and API access
+        Manage your account, subscription and API access
       </p>
 
-      <Tabs defaultValue="subscription" className="space-y-8">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full">
-          <TabsTrigger value="subscription">Subscription</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+      <Tabs defaultValue="account" className="space-y-8">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-3 w-full">
           <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
           <TabsTrigger value="api">API Tokens</TabsTrigger>
         </TabsList>
-
-        {/* Subscription Tab */}
-        <TabsContent value="subscription">
-          <Card>
-            <CardHeader>
-              <CardTitle>Subscription Plan</CardTitle>
-              <CardDescription>
-                Manage your subscription and billing details
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className={cn(
-                  "relative cursor-pointer border-2",
-                  "border-primary/30 bg-primary/5"
-                )}>
-                  <Badge variant="outline" className="absolute top-2 right-2 bg-primary/10 text-primary border-primary/20">
-                    Current
-                  </Badge>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Free Plan</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-2">
-                    <p className="text-2xl font-bold mb-2">₹0</p>
-                    <ul className="text-sm space-y-2">
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Basic alert customization
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Up to ₹50,000/month
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> 7-day analytics
-                      </li>
-                    </ul>
-                  </CardContent>
-                </Card>
-                
-                <Card className="cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Pro Plan</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-2">
-                    <p className="text-2xl font-bold mb-2">₹999<span className="text-muted-foreground text-sm font-normal">/month</span></p>
-                    <ul className="text-sm space-y-2">
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Advanced customization
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Up to ₹2,00,000/month
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> 30-day analytics
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Priority support
-                      </li>
-                    </ul>
-                  </CardContent>
-                  <CardFooter>
-                    <Button className="w-full">Upgrade</Button>
-                  </CardFooter>
-                </Card>
-                
-                <Card className="cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Enterprise</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-2">
-                    <p className="text-2xl font-bold mb-2">₹2,999<span className="text-muted-foreground text-sm font-normal">/month</span></p>
-                    <ul className="text-sm space-y-2">
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> White-labeled service
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Unlimited donations
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> 1-year analytics history
-                      </li>
-                      <li className="flex items-center">
-                        <CheckIcon className="mr-2" /> Dedicated support
-                      </li>
-                    </ul>
-                  </CardContent>
-                  <CardFooter>
-                    <Button variant="outline" className="w-full">Contact Sales</Button>
-                  </CardFooter>
-                </Card>
-              </div>
-              
-              <div className="bg-muted rounded-lg p-4">
-                <div className="flex items-start space-x-4">
-                  <CreditCard className="h-5 w-5 mt-0.5 text-muted-foreground" />
-                  <div>
-                    <h4 className="font-medium">Need help choosing a plan?</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Compare all features, or contact our sales team for custom pricing options tailored to your needs.
-                    </p>
-                    <div className="mt-3 flex gap-3">
-                      <Button variant="outline" size="sm">Compare Plans</Button>
-                      <Button size="sm">Contact Sales</Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Notifications Tab */}
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Choose how and when you would like to be notified
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Mail className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Email Notifications</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive donation and payment notifications via email
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationPreferences.email}
-                    onCheckedChange={() => handleToggleNotification("email")}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Push Notifications</p>
-                      <p className="text-sm text-muted-foreground">
-                        Get push notifications in your browser
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationPreferences.push}
-                    onCheckedChange={() => handleToggleNotification("push")}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-5 w-5 flex items-center justify-center text-muted-foreground">
-                      <svg className="h-4 w-4" viewBox="0 0 127 96" fill="currentColor">
-                        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-medium">Discord Integration</p>
-                      <p className="text-sm text-muted-foreground">
-                        Send donation alerts to your Discord server
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationPreferences.discord}
-                    onCheckedChange={() => handleToggleNotification("discord")}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Link className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Custom Webhook</p>
-                      <p className="text-sm text-muted-foreground">
-                        Send donation events to your own endpoint
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={notificationPreferences.webhook}
-                    onCheckedChange={() => handleToggleNotification("webhook")}
-                  />
-                </div>
-                
-                {notificationPreferences.webhook && (
-                  <div className="bg-muted p-4 rounded-lg mt-2">
-                    <Label htmlFor="webhook-url">Webhook URL</Label>
-                    <div className="flex mt-2">
-                      <Input
-                        id="webhook-url"
-                        placeholder="https://your-service.com/webhook"
-                        value={webhookUrl}
-                        onChange={(e) => setWebhookUrl(e.target.value)}
-                      />
-                      <Button onClick={handleSaveWebhook} size="sm" className="ml-2">
-                        <Save className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      We'll send a POST request with donation details to this URL.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {/* Account Tab */}
         <TabsContent value="account">
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile Information</CardTitle>
+                <CardDescription>
+                  Update your profile details and streamer information
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...profileForm}>
+                  <form onSubmit={profileForm.handleSubmit(handleProfileUpdate)} className="space-y-6">
+                    <div className="flex flex-col sm:flex-row items-center gap-6 mb-6">
+                      <div className="relative" onClick={handleAvatarClick}>
+                        <Avatar className="w-24 h-24 cursor-pointer">
+                          {previewUrl && <AvatarImage src={previewUrl} />}
+                          <AvatarFallback className="text-lg">
+                            {profile?.display_name 
+                              ? profile.display_name.slice(0, 2).toUpperCase() 
+                              : user?.email?.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="absolute bottom-0 right-0 rounded-full bg-primary p-1 cursor-pointer">
+                          <Upload size={16} className="text-primary-foreground" />
+                        </div>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          ref={fileInputRef}
+                          accept="image/*" 
+                          onChange={handleImageChange}
+                        />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <p className="font-medium">Profile Picture</p>
+                        <p className="text-sm text-muted-foreground">
+                          Click the avatar to upload a new profile picture
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <FormField
+                      control={profileForm.control}
+                      name="display_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Display Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={profileForm.control}
+                      name="streamer_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Streamer Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={profileForm.control}
+                      name="channel_link"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Channel Link</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="https://example.com/channel" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <Button type="submit">Save Profile</Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+            
             <Card>
               <CardHeader>
                 <CardTitle>Change Password</CardTitle>
@@ -535,6 +500,115 @@ const SettingsPage = () => {
           </div>
         </TabsContent>
 
+        {/* Subscription Tab */}
+        <TabsContent value="subscription">
+          <Card>
+            <CardHeader>
+              <CardTitle>Subscription Plan</CardTitle>
+              <CardDescription>
+                Manage your subscription and billing details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className={cn(
+                  "relative cursor-pointer border-2",
+                  "border-primary/30 bg-primary/5"
+                )}>
+                  <Badge variant="outline" className="absolute top-2 right-2 bg-primary/10 text-primary border-primary/20">
+                    Current
+                  </Badge>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Free Plan</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <p className="text-2xl font-bold mb-2">₹0</p>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Basic alert customization
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Up to ₹50,000/month
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> 7-day analytics
+                      </li>
+                    </ul>
+                  </CardContent>
+                </Card>
+                
+                <Card className="cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Pro Plan</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <p className="text-2xl font-bold mb-2">₹999<span className="text-muted-foreground text-sm font-normal">/month</span></p>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Advanced customization
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Up to ₹2,00,000/month
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> 30-day analytics
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Priority support
+                      </li>
+                    </ul>
+                  </CardContent>
+                  <CardFooter>
+                    <Button className="w-full">Upgrade</Button>
+                  </CardFooter>
+                </Card>
+                
+                <Card className="cursor-pointer hover:border-brand-300 hover:shadow-sm transition-all">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Enterprise</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <p className="text-2xl font-bold mb-2">₹2,999<span className="text-muted-foreground text-sm font-normal">/month</span></p>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> White-labeled service
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Unlimited donations
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> 1-year analytics history
+                      </li>
+                      <li className="flex items-center">
+                        <CheckIcon className="mr-2" /> Dedicated support
+                      </li>
+                    </ul>
+                  </CardContent>
+                  <CardFooter>
+                    <Button variant="outline" className="w-full">Contact Sales</Button>
+                  </CardFooter>
+                </Card>
+              </div>
+              
+              <div className="bg-muted rounded-lg p-4">
+                <div className="flex items-start space-x-4">
+                  <CreditCard className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                  <div>
+                    <h4 className="font-medium">Need help choosing a plan?</h4>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Compare all features, or contact our sales team for custom pricing options tailored to your needs.
+                    </p>
+                    <div className="mt-3 flex gap-3">
+                      <Button variant="outline" size="sm">Compare Plans</Button>
+                      <Button size="sm">Contact Sales</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* API Tokens Tab */}
         <TabsContent value="api">
           <Card>
@@ -568,7 +642,21 @@ const SettingsPage = () => {
                           onClick={() => handleCopyToken(token.token)} 
                           className="h-6 w-6 ml-1"
                         >
-                          <Copy className="h-3 w-3" />
+                          <svg
+                            width="15"
+                            height="15"
+                            viewBox="0 0 15 15"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3 w-3"
+                          >
+                            <path
+                              d="M5 2V1H10V2H5ZM4.75 0C4.33579 0 4 0.335786 4 0.75V1H3.5C2.67157 1 2 1.67157 2 2.5V12.5C2 13.3284 2.67157 14 3.5 14H11.5C12.3284 14 13 13.3284 13 12.5V2.5C13 1.67157 12.3284 1 11.5 1H11V0.75C11 0.335786 10.6642 0 10.25 0H4.75ZM11 2V2.25C11 2.66421 10.6642 3 10.25 3H4.75C4.33579 3 4 2.66421 4 2.25V2H3.5C3.22386 2 3 2.22386 3 2.5V12.5C3 12.7761 3.22386 13 3.5 13H11.5C11.7761 13 12 12.7761 12 12.5V2.5C12 2.22386 11.7761 2 11.5 2H11Z"
+                              fill="currentColor"
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                            ></path>
+                          </svg>
                           <span className="sr-only">Copy token</span>
                         </Button>
                       </div>

@@ -12,6 +12,8 @@ import {
   X,
   Radio
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -20,6 +22,7 @@ interface SidebarProps {
 
 const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
   const location = useLocation();
+  const { user, profile } = useAuth();
   
   const links = [
     { name: "Setup", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
@@ -31,6 +34,14 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
 
   const isActive = (path: string) => {
     return location.pathname === path;
+  };
+
+  // Get user initials for avatar fallback
+  const getInitials = () => {
+    if (profile?.display_name) {
+      return profile.display_name.slice(0, 2).toUpperCase();
+    }
+    return user?.email ? user.email.slice(0, 2).toUpperCase() : "SD";
   };
 
   return (
@@ -88,11 +99,14 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
           
           <div className="p-4 border-t border-border">
             <div className="flex items-center gap-3 px-2">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <span className="font-medium text-sm">JS</span>
-              </div>
+              <Avatar className="w-10 h-10">
+                {profile?.avatar_url && <AvatarImage src={profile.avatar_url} />}
+                <AvatarFallback>{getInitials()}</AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">Jay Sharma</p>
+                <p className="text-sm font-medium truncate">
+                  {profile?.streamer_name || profile?.display_name || user?.email?.split('@')[0] || 'User'}
+                </p>
                 <p className="text-xs text-muted-foreground truncate">Free Plan</p>
               </div>
             </div>
