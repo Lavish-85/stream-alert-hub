@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,94 +20,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "@/components/ui/sonner";
 import { useToast } from "@/hooks/use-toast";
 import { Check, FileUp, Play, Save, Trash } from "lucide-react";
-
-interface AlertTheme {
-  id: string;
-  name: string;
-  description: string;
-  preview: string;
-  colors: {
-    background: string;
-    text: string;
-  };
-}
+import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const AlertsPage = () => {
-  const { toast } = useToast();
-  const [selectedTheme, setSelectedTheme] = useState<AlertTheme | null>(null);
+  const { toast: hookToast } = useToast();
+  const { activeStyle, allStyles, setActiveStyle, isLoading } = useAlertStyle();
+  const [selectedTheme, setSelectedTheme] = useState<AlertStyle | null>(null);
   const [customizing, setCustomizing] = useState(false);
   const [showPreviewAlert, setShowPreviewAlert] = useState(false);
+  const [editedStyle, setEditedStyle] = useState<Partial<AlertStyle>>({});
   
-  const alertThemes: AlertTheme[] = [
-    {
-      id: "superchat",
-      name: "Superchat",
-      description: "Colorful banner with animation similar to YouTube Superchat",
-      preview: "bg-gradient-to-r from-red-500 to-orange-500",
-      colors: {
-        background: "#ef4444",
-        text: "#ffffff"
-      }
-    },
-    {
-      id: "minimal",
-      name: "Minimal",
-      description: "Clean text banner with subtle animation",
-      preview: "bg-white border border-gray-200",
-      colors: {
-        background: "#ffffff",
-        text: "#111827"
-      }
-    },
-    {
-      id: "ticker",
-      name: "Ticker",
-      description: "Bottom-third scrolling ticker style",
-      preview: "bg-blue-600",
-      colors: {
-        background: "#2563eb",
-        text: "#ffffff"
-      }
-    },
-    {
-      id: "explosion",
-      name: "Explosion",
-      description: "Full-screen explosive reveal with particles",
-      preview: "bg-gradient-to-br from-purple-600 to-pink-600",
-      colors: {
-        background: "#9333ea",
-        text: "#ffffff"
-      }
-    },
-    {
-      id: "side-slide",
-      name: "Side Slide",
-      description: "Elegant slide-in from the side of the screen",
-      preview: "bg-gradient-to-r from-green-500 to-emerald-700",
-      colors: {
-        background: "#10b981",
-        text: "#ffffff"
-      }
-    },
-    {
-      id: "toast",
-      name: "Toast",
-      description: "Simple non-intrusive toast notification style",
-      preview: "bg-gray-800",
-      colors: {
-        background: "#1f2937",
-        text: "#ffffff"
-      }
+  // When active style changes, update selected theme
+  useEffect(() => {
+    if (activeStyle && !selectedTheme) {
+      setSelectedTheme(activeStyle);
     }
-  ];
+  }, [activeStyle, selectedTheme]);
 
-  const handleSelectTheme = (theme: AlertTheme) => {
+  const handleSelectTheme = (theme: AlertStyle) => {
     setSelectedTheme(theme);
+    setEditedStyle(theme);
     setCustomizing(true);
-    toast({
-      title: `"${theme.name}" theme selected`,
+    toast(`"${theme.name}" theme selected`, {
       description: "Customize your alert using the options below."
     });
   };
@@ -120,11 +58,53 @@ const AlertsPage = () => {
     }, 5000);
   };
 
-  const handleSaveTheme = () => {
-    toast({
-      title: "Theme saved successfully",
-      description: "Your custom theme has been saved and is ready to use."
-    });
+  const handleSaveTheme = async () => {
+    if (!selectedTheme) return;
+
+    try {
+      // Update the theme in database
+      const { error } = await supabase
+        .from('alert_styles')
+        .update({
+          background_color: editedStyle.background_color || selectedTheme.background_color,
+          text_color: editedStyle.text_color || selectedTheme.text_color,
+          font_family: editedStyle.font_family || selectedTheme.font_family,
+          animation_type: editedStyle.animation_type || selectedTheme.animation_type,
+          sound: editedStyle.sound || selectedTheme.sound,
+          volume: editedStyle.volume || selectedTheme.volume,
+          duration: editedStyle.duration || selectedTheme.duration
+        })
+        .eq('id', selectedTheme.id);
+
+      if (error) throw new Error(error.message);
+
+      // Set as active theme
+      const updatedTheme = {
+        ...selectedTheme,
+        ...editedStyle
+      } as AlertStyle;
+      
+      await setActiveStyle(updatedTheme);
+
+      hookToast({
+        title: "Theme saved successfully",
+        description: `${updatedTheme.name} has been saved and set as your active alert style.`
+      });
+    } catch (err) {
+      console.error("Error saving theme:", err);
+      hookToast({
+        title: "Failed to save theme",
+        description: "There was an error saving your theme settings.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setEditedStyle(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   return (
@@ -136,21 +116,31 @@ const AlertsPage = () => {
 
       {!customizing ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {alertThemes.map((theme) => (
-            <Card key={theme.id} className="overflow-hidden">
-              <div className={`h-32 ${theme.preview} flex items-center justify-center`}>
+          {allStyles.map((style) => (
+            <Card key={style.id} className="overflow-hidden">
+              <div 
+                className="h-32 flex items-center justify-center" 
+                style={{ backgroundColor: style.background_color }}
+              >
                 <div className="w-3/4 bg-white/20 backdrop-blur-sm rounded-md p-3">
                   <div className="h-4 w-24 bg-white/70 rounded mb-2"></div>
                   <div className="h-3 w-full bg-white/40 rounded"></div>
                 </div>
               </div>
               <CardHeader>
-                <CardTitle>{theme.name}</CardTitle>
-                <CardDescription>{theme.description}</CardDescription>
+                <div className="flex justify-between items-center">
+                  <CardTitle>{style.name}</CardTitle>
+                  {style.is_active && (
+                    <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center">
+                      <Check className="w-3 h-3 mr-1" /> Active
+                    </span>
+                  )}
+                </div>
+                <CardDescription>{style.description}</CardDescription>
               </CardHeader>
               <CardFooter>
-                <Button onClick={() => handleSelectTheme(theme)} className="w-full">
-                  Select
+                <Button onClick={() => handleSelectTheme(style)} className="w-full">
+                  {style.is_active ? 'Customize' : 'Select'}
                 </Button>
               </CardFooter>
             </Card>
@@ -188,8 +178,8 @@ const AlertsPage = () => {
                     <div 
                       className="donation-alert absolute bottom-4 left-4 right-4 p-4 rounded-lg"
                       style={{
-                        backgroundColor: selectedTheme?.colors.background,
-                        color: selectedTheme?.colors.text
+                        backgroundColor: editedStyle.background_color || selectedTheme?.background_color,
+                        color: editedStyle.text_color || selectedTheme?.text_color
                       }}
                     >
                       <div className="flex items-center gap-3">
@@ -233,11 +223,11 @@ const AlertsPage = () => {
                         <div className="flex gap-2">
                           <div 
                             className="w-10 h-10 rounded border cursor-pointer"
-                            style={{ backgroundColor: selectedTheme?.colors.background }}
+                            style={{ backgroundColor: editedStyle.background_color || selectedTheme?.background_color }}
                           ></div>
                           <Input 
-                            value={selectedTheme?.colors.background} 
-                            onChange={() => {}} 
+                            value={editedStyle.background_color || selectedTheme?.background_color} 
+                            onChange={(e) => handleInputChange('background_color', e.target.value)}
                           />
                         </div>
                       </div>
@@ -256,7 +246,10 @@ const AlertsPage = () => {
                     <TabsContent value="typography" className="space-y-4 pt-4">
                       <div className="space-y-2">
                         <Label>Font Family</Label>
-                        <Select defaultValue="inter">
+                        <Select 
+                          value={editedStyle.font_family || selectedTheme?.font_family || "inter"}
+                          onValueChange={(value) => handleInputChange('font_family', value)}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select font" />
                           </SelectTrigger>
@@ -282,11 +275,11 @@ const AlertsPage = () => {
                         <div className="flex gap-2">
                           <div 
                             className="w-10 h-10 rounded border cursor-pointer"
-                            style={{ backgroundColor: selectedTheme?.colors.text }}
+                            style={{ backgroundColor: editedStyle.text_color || selectedTheme?.text_color }}
                           ></div>
                           <Input 
-                            value={selectedTheme?.colors.text} 
-                            onChange={() => {}} 
+                            value={editedStyle.text_color || selectedTheme?.text_color} 
+                            onChange={(e) => handleInputChange('text_color', e.target.value)}
                           />
                         </div>
                       </div>
@@ -295,7 +288,10 @@ const AlertsPage = () => {
                     <TabsContent value="sound" className="space-y-4 pt-4">
                       <div className="space-y-2">
                         <Label>Alert Sound</Label>
-                        <Select defaultValue="chime">
+                        <Select 
+                          value={editedStyle.sound || selectedTheme?.sound || "chime"}
+                          onValueChange={(value) => handleInputChange('sound', value)}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select sound" />
                           </SelectTrigger>
@@ -311,9 +307,16 @@ const AlertsPage = () => {
                       <div className="space-y-2">
                         <div className="flex justify-between">
                           <Label>Volume</Label>
-                          <span className="text-xs text-muted-foreground">50%</span>
+                          <span className="text-xs text-muted-foreground">
+                            {editedStyle.volume || selectedTheme?.volume || 50}%
+                          </span>
                         </div>
-                        <Slider defaultValue={[50]} max={100} step={1} />
+                        <Slider 
+                          defaultValue={[editedStyle.volume || selectedTheme?.volume || 50]} 
+                          max={100} 
+                          step={1}
+                          onValueChange={(value) => handleInputChange('volume', value[0])}
+                        />
                       </div>
                       
                       <div className="text-center mt-4">
@@ -326,24 +329,11 @@ const AlertsPage = () => {
                     
                     <TabsContent value="animation" className="space-y-4 pt-4">
                       <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <Label>Animation Speed</Label>
-                          <span className="text-xs text-muted-foreground">Medium</span>
-                        </div>
-                        <Slider defaultValue={[50]} max={100} step={1} />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <Label>Duration</Label>
-                          <span className="text-xs text-muted-foreground">5s</span>
-                        </div>
-                        <Slider defaultValue={[50]} max={100} step={1} />
-                      </div>
-                      
-                      <div className="space-y-2">
                         <Label>Animation Type</Label>
-                        <Select defaultValue="fade">
+                        <Select 
+                          value={editedStyle.animation_type || selectedTheme?.animation_type || "fade"}
+                          onValueChange={(value) => handleInputChange('animation_type', value)}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select animation" />
                           </SelectTrigger>
@@ -354,6 +344,22 @@ const AlertsPage = () => {
                             <SelectItem value="zoom">Zoom</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <Label>Duration</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {editedStyle.duration || selectedTheme?.duration || 5}s
+                          </span>
+                        </div>
+                        <Slider 
+                          defaultValue={[editedStyle.duration || selectedTheme?.duration || 5]} 
+                          max={10} 
+                          min={1}
+                          step={1}
+                          onValueChange={(value) => handleInputChange('duration', value[0])}
+                        />
                       </div>
                     </TabsContent>
                   </Tabs>

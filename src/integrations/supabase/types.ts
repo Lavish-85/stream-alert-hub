@@ -9,6 +9,51 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      alert_styles: {
+        Row: {
+          animation_type: string | null
+          background_color: string
+          created_at: string | null
+          description: string | null
+          duration: number | null
+          font_family: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sound: string | null
+          text_color: string
+          volume: number | null
+        }
+        Insert: {
+          animation_type?: string | null
+          background_color: string
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          font_family?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sound?: string | null
+          text_color: string
+          volume?: number | null
+        }
+        Update: {
+          animation_type?: string | null
+          background_color?: string
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          font_family?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sound?: string | null
+          text_color?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
       donations: {
         Row: {
           amount: number

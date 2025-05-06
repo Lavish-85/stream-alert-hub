@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Bell, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -23,6 +24,7 @@ const LiveAlertsPage = () => {
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
+  const { activeStyle } = useAlertStyle();
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -53,15 +55,16 @@ const LiveAlertsPage = () => {
           // Set as last alert to highlight it
           setLastAlert(newDonation);
           
-          // Show toast notification - Fixed here
-          toast(`${newDonation.donor_name} donated ${formatIndianRupees(newDonation.amount)}`, {
+          // Show toast notification
+          toast(newDonation.donor_name + " donated " + formatIndianRupees(newDonation.amount), {
             description: newDonation.message || "No message",
           });
           
-          // Reset last alert highlight after 5 seconds
+          // Reset last alert highlight after several seconds
+          const duration = activeStyle?.duration || 5;
           setTimeout(() => {
             setLastAlert(null);
-          }, 5000);
+          }, duration * 1000);
         }
       )
       .subscribe((status) => {
@@ -97,7 +100,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, []);
+  }, [activeStyle?.duration]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -109,11 +112,35 @@ const LiveAlertsPage = () => {
     });
   };
 
+  // Get animation class based on selected style
+  const getAnimationClass = () => {
+    if (!activeStyle?.animation_type) return "animate-fade-in";
+    
+    switch(activeStyle.animation_type) {
+      case 'slide':
+        return "animate-slide-in-right";
+      case 'bounce':
+        return "animate-bounce";
+      case 'zoom':
+        return "animate-scale-in";
+      case 'fade':
+      default:
+        return "animate-fade-in";
+    }
+  };
+
   // Extract query parameters to check if we're in OBS mode
   const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
+    // Apply the active style to the alerts
+    const alertStyle = activeStyle || {
+      background_color: "#ffffff",
+      text_color: "#111827",
+      font_family: "system-ui"
+    };
+    
     return (
       <div className="obs-container" style={{ 
         background: 'transparent',
@@ -123,15 +150,22 @@ const LiveAlertsPage = () => {
         position: 'relative'
       }}>
         {lastAlert && (
-          <div className="donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full animate-fade-in">
-            <Alert className="border-2 border-primary bg-background/90 backdrop-blur-sm shadow-lg">
-              <Bell className="h-6 w-6 text-primary" />
+          <div className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}>
+            <Alert 
+              className={cn("border-2 backdrop-blur-sm shadow-lg")}
+              style={{
+                backgroundColor: `${alertStyle.background_color}${isOBSMode ? "E6" : ""}`, // E6 = 90% opacity
+                color: alertStyle.text_color,
+                fontFamily: alertStyle.font_family || "inherit"
+              }}
+            >
+              <Bell className="h-6 w-6" style={{ color: alertStyle.text_color }} />
               <div className="w-full">
-                <AlertTitle className="text-lg font-bold">
+                <AlertTitle className="text-lg font-bold" style={{ color: alertStyle.text_color }}>
                   {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
                 </AlertTitle>
                 {lastAlert.message && (
-                  <AlertDescription className="text-base mt-2">
+                  <AlertDescription className="text-base mt-2" style={{ color: alertStyle.text_color }}>
                     {lastAlert.message}
                   </AlertDescription>
                 )}
@@ -184,7 +218,6 @@ const LiveAlertsPage = () => {
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/live-alerts?obs=true`);
-                    // Fix the toast call here
                     toast("Copied!", {
                       description: "OBS URL copied to clipboard"
                     });
@@ -204,6 +237,17 @@ const LiveAlertsPage = () => {
                 <li>Enable "Refresh browser when scene becomes active"</li>
                 <li>Click OK to save</li>
               </ol>
+            </div>
+            
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+              <h3 className="font-medium mb-1">Current Alert Style</h3>
+              <p className="text-sm">
+                {activeStyle ? (
+                  <>Using "{activeStyle.name}" style for alerts - customize in the Alerts page</>
+                ) : (
+                  <>No alert style selected. Visit the Alerts page to choose and customize one.</>
+                )}
+              </p>
             </div>
           </CardContent>
         </Card>
