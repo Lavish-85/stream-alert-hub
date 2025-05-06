@@ -53,7 +53,7 @@ const LiveAlertsPage = () => {
           // Set as last alert to highlight it
           setLastAlert(newDonation);
           
-          // Show toast notification
+          // Show toast notification - Fixed here
           toast(`${newDonation.donor_name} donated ${formatIndianRupees(newDonation.amount)}`, {
             description: newDonation.message || "No message",
           });
@@ -178,9 +178,9 @@ const LiveAlertsPage = () => {
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/live-alerts?obs=true`);
-                    toast({
-                      title: "Copied!",
-                      description: "OBS URL copied to clipboard",
+                    // Fix the toast call here
+                    toast("Copied!", {
+                      description: "OBS URL copied to clipboard"
                     });
                   }}
                 >
