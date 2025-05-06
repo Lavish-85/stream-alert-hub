@@ -1,6 +1,5 @@
 
 import * as React from "react";
-import { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
 
@@ -26,16 +25,16 @@ interface AlertStyleContextType {
   error: Error | null;
 }
 
-const AlertStyleContext = createContext<AlertStyleContextType | undefined>(undefined);
+const AlertStyleContext = React.createContext<AlertStyleContextType | undefined>(undefined);
 
-export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeStyle, setActiveStyleState] = useState<AlertStyle | null>(null);
-  const [allStyles, setAllStyles] = useState<AlertStyle[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) => {
+  const [activeStyle, setActiveStyleState] = React.useState<AlertStyle | null>(null);
+  const [allStyles, setAllStyles] = React.useState<AlertStyle[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<Error | null>(null);
 
   // Fetch all styles and identify active one
-  useEffect(() => {
+  React.useEffect(() => {
     async function fetchStyles() {
       try {
         setIsLoading(true);
@@ -113,7 +112,9 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
-      toast.error("Error updating style", {
+      toast({
+        variant: "destructive",
+        title: "Error updating style",
         description: "Could not update alert style. Please try again."
       });
     } finally {
@@ -129,7 +130,7 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 };
 
 export const useAlertStyle = () => {
-  const context = useContext(AlertStyleContext);
+  const context = React.useContext(AlertStyleContext);
   if (context === undefined) {
     throw new Error('useAlertStyle must be used within an AlertStyleProvider');
   }

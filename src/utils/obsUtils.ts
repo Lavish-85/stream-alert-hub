@@ -13,8 +13,7 @@ export const sendTestAlert = async () => {
       payment_id: `test_${uuidv4().substring(0, 8)}`,
       amount: 100,
       donor_name: "Test Donation",
-      message: "This is a test donation alert.",
-      is_test: true
+      message: "This is a test donation alert."
     };
 
     // Insert the test donation into the database
