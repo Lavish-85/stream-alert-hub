@@ -22,6 +22,7 @@ const LiveAlertsPage = () => {
   const [alerts, setAlerts] = useState<Donation[]>([]);
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
+  const [showOBSInstructions, setShowOBSInstructions] = useState(false);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -108,6 +109,34 @@ const LiveAlertsPage = () => {
     });
   };
 
+  // Extract query parameters to check if we're in OBS mode
+  const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
+
+  // If in OBS mode, render a simplified version
+  if (isOBSMode) {
+    return (
+      <div className="p-4">
+        {lastAlert && (
+          <div className="donation-alert fixed bottom-0 right-0 p-5 max-w-md w-full">
+            <Alert className="border-2 border-primary bg-background/90 backdrop-blur-sm shadow-lg">
+              <Bell className="h-6 w-6 text-primary" />
+              <div className="w-full">
+                <AlertTitle className="text-lg font-bold">
+                  {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
+                </AlertTitle>
+                {lastAlert.message && (
+                  <AlertDescription className="text-base mt-2">
+                    {lastAlert.message}
+                  </AlertDescription>
+                )}
+              </div>
+            </Alert>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -115,13 +144,64 @@ const LiveAlertsPage = () => {
           <h1 className="text-3xl font-bold mb-1">Live Donation Alerts</h1>
           <p className="text-muted-foreground">Watch donations as they come in real-time</p>
         </div>
-        <Badge 
-          variant={connected ? "default" : "destructive"}
-          className="mt-2 sm:mt-0"
-        >
-          {connected ? "Connected" : "Disconnected"}
-        </Badge>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center mt-2 sm:mt-0">
+          <Badge 
+            variant={connected ? "default" : "destructive"}
+          >
+            {connected ? "Connected" : "Disconnected"}
+          </Badge>
+          <button
+            onClick={() => setShowOBSInstructions(!showOBSInstructions)}
+            className="text-sm text-primary hover:underline"
+          >
+            {showOBSInstructions ? "Hide OBS Setup" : "Show OBS Setup"}
+          </button>
+        </div>
       </div>
+
+      {showOBSInstructions && (
+        <Card className="mb-6 bg-muted/50">
+          <CardHeader>
+            <CardTitle>OBS Browser Source Setup</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <p className="font-medium">URL for OBS Browser Source:</p>
+              <div className="flex">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/live-alerts?obs=true`}
+                  className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
+                />
+                <button 
+                  className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/live-alerts?obs=true`);
+                    toast({
+                      title: "Copied!",
+                      description: "OBS URL copied to clipboard",
+                    });
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="font-medium">Instructions:</p>
+              <ol className="list-decimal list-inside space-y-2">
+                <li>In OBS Studio, add a new "Browser" source</li>
+                <li>Paste the URL above into the URL field</li>
+                <li>Set the width to 1280 and height to 720</li>
+                <li>Enable "Refresh browser when scene becomes active"</li>
+                <li>Click OK to save</li>
+              </ol>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Alert Display */}
       <div className="grid gap-6">
