@@ -49,6 +49,7 @@ const SettingsPage = () => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(profile?.avatar_url || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,22 +142,37 @@ const SettingsPage = () => {
   
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match", {
-        description: "New password and confirmation must be identical."
-      });
-      return;
-    }
-    
-    if (newPassword.length < 8) {
-      toast.error("Password too short", {
-        description: "Password must be at least 8 characters long."
-      });
-      return;
-    }
+    setIsPasswordSubmitting(true);
     
     try {
+      if (newPassword !== confirmPassword) {
+        toast.error("Passwords do not match", {
+          description: "New password and confirmation must be identical."
+        });
+        return;
+      }
+      
+      if (newPassword.length < 8) {
+        toast.error("Password too short", {
+          description: "Password must be at least 8 characters long."
+        });
+        return;
+      }
+      
+      // First verify current password by attempting a sign-in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || "",
+        password: currentPassword,
+      });
+      
+      if (signInError) {
+        toast.error("Current password is incorrect", {
+          description: "Please enter your current password correctly."
+        });
+        return;
+      }
+      
+      // If current password is correct, proceed with password update
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -174,6 +190,8 @@ const SettingsPage = () => {
       toast.error("Error updating password", {
         description: error.message
       });
+    } finally {
+      setIsPasswordSubmitting(false);
     }
   };
   
@@ -383,7 +401,9 @@ const SettingsPage = () => {
                       required
                     />
                   </div>
-                  <Button type="submit">Update Password</Button>
+                  <Button type="submit" disabled={isPasswordSubmitting}>
+                    {isPasswordSubmitting ? "Updating..." : "Update Password"}
+                  </Button>
                 </form>
               </CardContent>
             </Card>
