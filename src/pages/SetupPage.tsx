@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Card,
   CardContent,
@@ -38,17 +38,12 @@ const SetupPage = () => {
   const [upiIdError, setUpiIdError] = useState("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
-  const [obsUrl, setObsUrl] = useState<string>("");
 
-  // Load OBS URL on component mount
-  useEffect(() => {
-    const loadObsUrl = async () => {
-      const url = await getOBSUrl();
-      setObsUrl(url);
-    };
-    
-    loadObsUrl();
-  }, []);
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
+  };
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -88,7 +83,7 @@ const SetupPage = () => {
     
     try {
       // Send a test alert through Supabase
-      const { error, data } = await sendTestAlert();
+      const { error } = await sendTestAlert();
       
       if (error) {
         console.error("Test alert error:", error);
@@ -99,7 +94,6 @@ const SetupPage = () => {
           variant: "destructive",
         });
       } else {
-        console.log("Test alert sent successfully:", data);
         setConnectionStatus("success");
         toast({
           title: "Connection successful!",
@@ -169,7 +163,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 2: Generate Links */}
+        {/* Step 2: Generate Links (previously Step 3) */}
         {currentStep === 2 && (
           <Card>
             <CardHeader>
@@ -221,27 +215,23 @@ const SetupPage = () => {
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={obsUrl}
+                        value={getOBSUrl()}
                         readOnly
                       />
                       <Button
                         variant="outline"
                         size="icon"
                         className="ml-2"
-                        onClick={async () => {
-                          const url = await getOBSUrl();
-                          navigator.clipboard.writeText(url);
-                          toast({
-                            title: "Copied!",
-                            description: "OBS URL copied to clipboard"
-                          });
-                        }}
+                        onClick={() => handleCopy(
+                          getOBSUrl(),
+                          "OBS URL copied to clipboard"
+                        )}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This URL includes your unique user ID and a timestamp to prevent caching
+                      This URL includes a timestamp parameter to prevent caching when styles change
                     </p>
                   </div>
                   <div className="bg-muted p-4 rounded-lg">
@@ -262,7 +252,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 3: Connection Test */}
+        {/* Step 3: Connection Test (previously Step 4) */}
         {currentStep === 3 && (
           <Card>
             <CardHeader>

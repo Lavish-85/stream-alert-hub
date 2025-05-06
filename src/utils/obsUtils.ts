@@ -26,8 +26,6 @@ export const sendTestAlert = async () => {
       // Removed is_test field as it doesn't exist in the database
     };
 
-    console.log("Sending test donation:", testDonation);
-
     // Insert the test donation into the database
     const { data, error } = await supabase
       .from('donations')
@@ -40,7 +38,6 @@ export const sendTestAlert = async () => {
       return { error };
     }
 
-    console.log("Test donation created successfully:", data);
     return { data };
   } catch (err) {
     console.error("Exception in sendTestAlert:", err);
@@ -51,21 +48,19 @@ export const sendTestAlert = async () => {
 /**
  * Generates an OBS URL with cache-busting parameters
  */
-export const getOBSUrl = async () => {
-  // Get the current user's ID
-  const { data } = await supabase.auth.getUser();
-  const userId = data?.user?.id;
-  
-  if (!userId) {
-    console.error("No user ID available for OBS URL");
-    return `${window.location.origin}/live-alerts?obs=true&t=${new Date().getTime()}`;
-  }
-  
-  // Build the URL with required parameters
-  const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-  const timeParam = `t=${new Date().getTime()}`;
-  const userParam = `user_id=${userId}`;
-  
-  console.log(`Generated OBS URL with user ID: ${userId}`);
-  return `${baseUrl}&${timeParam}&${userParam}`;
+export const getOBSUrl = () => {
+  // Get the current user's ID if available
+  const getUserId = async () => {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id;
+  };
+
+  // Use the current user's ID as a parameter if available
+  return getUserId().then(userId => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    const timeParam = `t=${new Date().getTime()}`;
+    const userParam = userId ? `&user_id=${userId}` : '';
+    
+    return `${baseUrl}&${timeParam}${userParam}`;
+  });
 };
