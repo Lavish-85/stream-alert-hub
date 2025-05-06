@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const AlertsPage = () => {
   const { toast: hookToast } = useToast();
-  const { activeStyle, allStyles, setActiveStyle, isLoading } = useAlertStyle();
+  const { activeStyle, allStyles, setActiveStyle, isLoading, refreshStyles } = useAlertStyle();
   const [selectedTheme, setSelectedTheme] = useState<AlertStyle | null>(null);
   const [customizing, setCustomizing] = useState(false);
   const [showPreviewAlert, setShowPreviewAlert] = useState(false);
@@ -62,6 +61,9 @@ const AlertsPage = () => {
     if (!selectedTheme) return;
 
     try {
+      // Add timestamp to force cache invalidation
+      const timestamp = Date.now();
+      
       // Update the theme in database
       const { error } = await supabase
         .from('alert_styles')
@@ -72,7 +74,8 @@ const AlertsPage = () => {
           animation_type: editedStyle.animation_type || selectedTheme.animation_type,
           sound: editedStyle.sound || selectedTheme.sound,
           volume: editedStyle.volume || selectedTheme.volume,
-          duration: editedStyle.duration || selectedTheme.duration
+          duration: editedStyle.duration || selectedTheme.duration,
+          last_updated: timestamp // Add timestamp to force refresh
         })
         .eq('id', selectedTheme.id);
 
@@ -81,10 +84,14 @@ const AlertsPage = () => {
       // Set as active theme
       const updatedTheme = {
         ...selectedTheme,
-        ...editedStyle
+        ...editedStyle,
+        last_updated: timestamp
       } as AlertStyle;
       
       await setActiveStyle(updatedTheme);
+      
+      // Force refresh of all styles to ensure UI consistency
+      await refreshStyles();
 
       hookToast({
         title: "Theme saved successfully",
@@ -94,8 +101,7 @@ const AlertsPage = () => {
       console.error("Error saving theme:", err);
       hookToast({
         title: "Failed to save theme",
-        description: "There was an error saving your theme settings.",
-        variant: "destructive"
+        description: "There was an error saving your theme settings."
       });
     }
   };
@@ -365,7 +371,8 @@ const AlertsPage = () => {
                   </Tabs>
                 </CardContent>
                 <CardFooter className="flex flex-col sm:flex-row gap-2 sm:justify-between">
-                  <Button variant="outline" className="w-full sm:w-auto">
+                  <Button variant="outline" className="w-full sm:w-auto" 
+                    onClick={() => setEditedStyle({})}>
                     <Trash className="mr-2 h-4 w-4" /> Reset
                   </Button>
                   <Button onClick={handleSaveTheme} className="w-full sm:w-auto">

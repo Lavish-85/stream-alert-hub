@@ -24,6 +24,7 @@ interface AlertStyleContextType {
   setActiveStyle: (style: AlertStyle) => Promise<void>;
   isLoading: boolean;
   error: Error | null;
+  refreshStyles: () => Promise<void>;
 }
 
 const AlertStyleContext = createContext<AlertStyleContextType | undefined>(undefined);
@@ -34,44 +35,68 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Fetch all styles and identify active one
-  useEffect(() => {
-    async function fetchStyles() {
-      try {
-        setIsLoading(true);
-        
-        const { data, error } = await supabase
-          .from('alert_styles')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        if (error) throw new Error(error.message);
-        
-        console.log("Fetched alert styles:", data);
-        
-        if (data && data.length > 0) {
-          setAllStyles(data);
-          const active = data.find(style => style.is_active === true);
-          if (active) {
-            console.log("Found active style:", active);
-            setActiveStyleState(active);
-          }
-          else if (data.length > 0) {
-            console.log("No active style found, using first style:", data[0]);
-            setActiveStyleState(data[0]);
-          }
-        } else {
-          console.log("No styles found in database");
+  // Function to fetch styles that can be called programmatically when needed
+  const fetchStyles = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('alert_styles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw new Error(error.message);
+      
+      console.log("Fetched alert styles:", data);
+      
+      if (data && data.length > 0) {
+        setAllStyles(data);
+        const active = data.find(style => style.is_active === true);
+        if (active) {
+          console.log("Found active style:", active);
+          setActiveStyleState(active);
         }
-      } catch (err) {
-        console.error('Error fetching alert styles:', err);
-        setError(err instanceof Error ? err : new Error('Failed to fetch alert styles'));
-      } finally {
-        setIsLoading(false);
+        else if (data.length > 0) {
+          console.log("No active style found, using first style:", data[0]);
+          setActiveStyleState(data[0]);
+        }
+      } else {
+        console.log("No styles found in database");
       }
+    } catch (err) {
+      console.error('Error fetching alert styles:', err);
+      setError(err instanceof Error ? err : new Error('Failed to fetch alert styles'));
+    } finally {
+      setIsLoading(false);
     }
+  };
 
+  // Call fetchStyles when component mounts
+  useEffect(() => {
     fetchStyles();
+  }, []);
+
+  // Set up real-time subscription for style changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:alert_styles')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'alert_styles' 
+        }, 
+        (payload) => {
+          console.log('Alert style changed:', payload);
+          // Refresh styles when any change happens
+          fetchStyles();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Update active style in database
@@ -131,8 +156,20 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  // Public method to refresh styles
+  const refreshStyles = async () => {
+    return fetchStyles();
+  };
+
   return (
-    <AlertStyleContext.Provider value={{ activeStyle, allStyles, setActiveStyle, isLoading, error }}>
+    <AlertStyleContext.Provider value={{ 
+      activeStyle, 
+      allStyles, 
+      setActiveStyle, 
+      isLoading, 
+      error,
+      refreshStyles
+    }}>
       {children}
     </AlertStyleContext.Provider>
   );
