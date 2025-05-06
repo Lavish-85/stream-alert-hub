@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
@@ -112,9 +111,8 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
-      toast("Error updating style", {
-        description: "Could not update alert style. Please try again.",
-        variant: "destructive"
+      toast.error("Error updating style", {
+        description: "Could not update alert style. Please try again."
       });
     } finally {
       setIsLoading(false);
