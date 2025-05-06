@@ -112,12 +112,18 @@ const LiveAlertsPage = () => {
   // Extract query parameters to check if we're in OBS mode
   const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
-  // If in OBS mode, render a simplified version
+  // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
     return (
-      <div className="p-4">
+      <div className="obs-container" style={{ 
+        background: 'transparent',
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
         {lastAlert && (
-          <div className="donation-alert fixed bottom-0 right-0 p-5 max-w-md w-full">
+          <div className="donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full animate-fade-in">
             <Alert className="border-2 border-primary bg-background/90 backdrop-blur-sm shadow-lg">
               <Bell className="h-6 w-6 text-primary" />
               <div className="w-full">
