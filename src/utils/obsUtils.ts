@@ -22,8 +22,8 @@ export const sendTestAlert = async () => {
       amount: 100,
       donor_name: "Test Donation",
       message: "This is a test donation alert.",
-      user_id: user.id,
-      is_test: true
+      user_id: user.id
+      // Removed is_test field as it doesn't exist in the database
     };
 
     // Insert the test donation into the database

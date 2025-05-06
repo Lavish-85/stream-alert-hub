@@ -19,7 +19,6 @@ interface Donation {
   message: string | null;
   created_at: string;
   user_id: string | null;
-  is_test?: boolean;
 }
 
 const LiveAlertsPage = () => {
@@ -46,6 +45,11 @@ const LiveAlertsPage = () => {
       currency: 'INR',
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  // Check if a donation is likely a test based on payment_id prefix
+  const isTestDonation = (donation: Donation) => {
+    return donation.payment_id.startsWith('test_');
   };
 
   useEffect(() => {
@@ -77,7 +81,7 @@ const LiveAlertsPage = () => {
           
           // Show toast notification if not in OBS mode
           if (!isOBSMode) {
-            const isTest = newDonation.is_test ? " (Test)" : "";
+            const isTest = isTestDonation(newDonation) ? " (Test)" : "";
             toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
               description: newDonation.message || "No message",
             });
@@ -210,7 +214,7 @@ const LiveAlertsPage = () => {
                   className="text-lg font-bold" 
                   style={{ color: alertStyle.text_color }}
                 >
-                  {lastAlert.is_test ? "(Test) " : ""}
+                  {isTestDonation(lastAlert) ? "(Test) " : ""}
                   {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
                 </AlertTitle>
                 {lastAlert.message && (
@@ -318,14 +322,14 @@ const LiveAlertsPage = () => {
               className={cn(
                 "transition-all duration-500 p-6",
                 lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
-                donation.is_test ? "border-blue-300" : ""
+                isTestDonation(donation) ? "border-blue-300" : ""
               )}
             >
               <Bell className="h-6 w-6 mt-0.5" />
               <div className="w-full">
                 <div className="flex justify-between items-start">
                   <AlertTitle className="font-semibold text-lg">
-                    {donation.is_test && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
+                    {isTestDonation(donation) && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
                     {donation.donor_name} donated {formatIndianRupees(donation.amount)}
                   </AlertTitle>
                   <span className="text-sm text-muted-foreground">
