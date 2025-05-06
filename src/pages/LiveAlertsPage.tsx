@@ -35,8 +35,12 @@ const LiveAlertsPage = () => {
   const obsUserId = urlParams.get('user_id');
   const userId = isOBSMode ? obsUserId : user?.id;
 
-  console.log("Current user ID:", userId);
-  console.log("Current active style:", activeStyle);
+  console.log("LiveAlertsPage render with:");
+  console.log("- isOBSMode:", isOBSMode);
+  console.log("- obsUserId from URL:", obsUserId);
+  console.log("- authenticated user ID:", user?.id);
+  console.log("- using user ID:", userId);
+  console.log("- current active style:", activeStyle);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -59,6 +63,8 @@ const LiveAlertsPage = () => {
       return;
     }
 
+    console.log(`Setting up subscription for user ID: ${userId}`);
+    
     // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
       .channel('public:donations')
@@ -98,8 +104,10 @@ const LiveAlertsPage = () => {
         console.log('Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           setConnected(true);
+          console.log('Successfully subscribed to donations channel');
         } else {
           setConnected(false);
+          console.log('Failed to subscribe to donations channel');
         }
       });
 
@@ -107,6 +115,7 @@ const LiveAlertsPage = () => {
     const fetchRecentDonations = async () => {
       if (!userId) return;
       
+      console.log(`Fetching recent donations for user ID: ${userId}`);
       const { data, error } = await supabase
         .from('donations')
         .select('*')
@@ -120,7 +129,10 @@ const LiveAlertsPage = () => {
       }
       
       if (data) {
+        console.log(`Fetched ${data.length} recent donations`);
         setAlerts(data);
+      } else {
+        console.log('No recent donations found');
       }
     };
 
@@ -128,6 +140,7 @@ const LiveAlertsPage = () => {
 
     // Cleanup on unmount
     return () => {
+      console.log('Unsubscribing from donations channel');
       channel.unsubscribe();
     };
   }, [userId, activeStyle?.duration]);

@@ -47,15 +47,14 @@ const App = () => {
                 <Route path="/auth" element={<AuthPage />} />
 
                 {/* OBS mode route bypasses Layout and auth */}
-                {isOBSMode && (
-                  <Route path="/live-alerts" element={<LiveAlertsPage />} />
-                )}
+                <Route path="/live-alerts" element={<LiveAlertsPage />} />
                 
                 {/* Protected routes with Layout */}
                 <Route element={<ProtectedRoute />}>
                   <Route element={<Layout />}>
                     <Route path="/" element={<SetupPage />} />
                     <Route path="/alerts" element={<AlertsPage />} />
+                    {/* Only show regular LiveAlertsPage in non-OBS mode in Layout */}
                     {!isOBSMode && <Route path="/live-alerts" element={<LiveAlertsPage />} />}
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
