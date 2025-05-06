@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -133,6 +134,12 @@ const LiveAlertsPage = () => {
     }
   };
 
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
+  };
+
   // Extract query parameters to check if we're in OBS mode
   const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
 
@@ -231,13 +238,13 @@ const LiveAlertsPage = () => {
                 <input
                   type="text"
                   readOnly
-                  value={`${window.location.origin}/live-alerts?obs=true`}
+                  value={getOBSUrl()}
                   className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
                 />
                 <button 
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/live-alerts?obs=true`);
+                    navigator.clipboard.writeText(getOBSUrl());
                     toast("Copied!", {
                       description: "OBS URL copied to clipboard"
                     });
@@ -246,6 +253,9 @@ const LiveAlertsPage = () => {
                   Copy
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                This URL includes a timestamp parameter to prevent caching when styles change
+              </p>
             </div>
 
             <div className="space-y-2">

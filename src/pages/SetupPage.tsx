@@ -39,6 +39,12 @@ const SetupPage = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
 
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
+  };
+
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
     if (!upiId) {
@@ -252,7 +258,7 @@ const SetupPage = () => {
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value="https://api.streamdonate.in/alerts?token=eyJhbGciOiJIUzI1NiJ9..."
+                        value={getOBSUrl()}
                         readOnly
                       />
                       <Button
@@ -260,13 +266,16 @@ const SetupPage = () => {
                         size="icon"
                         className="ml-2"
                         onClick={() => handleCopy(
-                          "https://api.streamdonate.in/alerts?token=eyJhbGciOiJIUzI1NiJ9...",
+                          getOBSUrl(),
                           "OBS URL copied to clipboard"
                         )}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      This URL includes a timestamp parameter to prevent caching when styles change
+                    </p>
                   </div>
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>

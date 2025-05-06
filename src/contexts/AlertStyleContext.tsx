@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/sonner";
 
 export interface AlertStyle {
   id: string;
@@ -102,9 +103,19 @@ export const AlertStyleProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
       
       console.log("Style activated successfully");
+      
+      // Show toast notification about successful update
+      toast("Alert style updated", {
+        description: `Now using "${style.name}" for donation alerts`
+      });
+      
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
+      toast("Error updating style", {
+        description: "Could not update alert style. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
