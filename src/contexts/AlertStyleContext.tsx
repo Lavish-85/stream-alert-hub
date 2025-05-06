@@ -112,9 +112,8 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
-      toast({
-        variant: "destructive",
-        title: "Error updating style",
+      // Fix: The sonner toast doesn't use a variant property directly in the toast function
+      toast("Error updating style", {
         description: "Could not update alert style. Please try again."
       });
     } finally {
