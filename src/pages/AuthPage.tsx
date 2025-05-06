@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, LucideStreamline } from "lucide-react";
+import { Loader2, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const AuthPage = () => {
@@ -32,7 +32,7 @@ const AuthPage = () => {
         <div className="mb-8 text-center">
           <div className="flex justify-center mb-4">
             <div className="rounded-full bg-primary p-3">
-              <LucideStreamline className="h-8 w-8 text-white" />
+              <Zap className="h-8 w-8 text-white" />
             </div>
           </div>
           <h1 className="mb-2 text-3xl font-bold">StreamDonate</h1>
