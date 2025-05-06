@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -17,6 +16,7 @@ interface Donation {
   donor_name: string;
   message: string | null;
   created_at: string;
+  is_test?: boolean;
 }
 
 const LiveAlertsPage = () => {
@@ -60,7 +60,8 @@ const LiveAlertsPage = () => {
           // Show toast notification if not in OBS mode
           const isOBSMode = new URLSearchParams(window.location.search).get('obs') === 'true';
           if (!isOBSMode) {
-            toast(newDonation.donor_name + " donated " + formatIndianRupees(newDonation.amount), {
+            const isTest = newDonation.is_test ? " (Test)" : "";
+            toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
               description: newDonation.message || "No message",
             });
           }
@@ -186,6 +187,7 @@ const LiveAlertsPage = () => {
                   className="text-lg font-bold" 
                   style={{ color: alertStyle.text_color }}
                 >
+                  {lastAlert.is_test ? "(Test) " : ""}
                   {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
                 </AlertTitle>
                 {lastAlert.message && (
@@ -291,13 +293,15 @@ const LiveAlertsPage = () => {
               key={donation.id}
               className={cn(
                 "transition-all duration-500 p-6",
-                lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : ""
+                lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
+                donation.is_test ? "border-blue-300" : ""
               )}
             >
               <Bell className="h-6 w-6 mt-0.5" />
               <div className="w-full">
                 <div className="flex justify-between items-start">
                   <AlertTitle className="font-semibold text-lg">
+                    {donation.is_test && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
                     {donation.donor_name} donated {formatIndianRupees(donation.amount)}
                   </AlertTitle>
                   <span className="text-sm text-muted-foreground">
@@ -314,7 +318,7 @@ const LiveAlertsPage = () => {
           <Card className="p-4">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center text-xl">
-                <AlertTriangle className="mr-2 h-6 w-6 text-muted-foreground" />
+                <AlertTriangle className="mr-2 h-6 w-4 text-muted-foreground" />
                 No alerts yet
               </CardTitle>
             </CardHeader>

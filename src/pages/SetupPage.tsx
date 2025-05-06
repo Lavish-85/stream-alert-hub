@@ -29,13 +29,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { sendTestAlert } from "@/utils/obsUtils";
 
 const SetupPage = () => {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [upiId, setUpiId] = useState("");
   const [upiIdError, setUpiIdError] = useState("");
-  const [kycStatus, setKycStatus] = useState<"pending" | "approved" | "none">("none");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
 
@@ -62,16 +63,11 @@ const SetupPage = () => {
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!validateUpiId()) return;
+      // Skip to step 3 (previously step 2 was KYC)
+      setCurrentStep(2);
+    } else {
+      setCurrentStep(currentStep + 1);
     }
-    setCurrentStep(currentStep + 1);
-  };
-
-  const handleFileUpload = () => {
-    toast({
-      title: "KYC documents uploaded",
-      description: "We'll review your documents within 24 hours.",
-    });
-    setKycStatus("pending");
   };
 
   const handleCopy = (text: string, message: string) => {
@@ -82,19 +78,36 @@ const SetupPage = () => {
     });
   };
 
-  const testConnection = () => {
+  const testConnection = async () => {
     setIsTestingConnection(true);
     setConnectionStatus("unknown");
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsTestingConnection(false);
-      setConnectionStatus("success");
-      toast({
-        title: "Connection successful!",
-        description: "Your OBS browser source is ready to receive alerts.",
+    try {
+      // Send a test alert through Supabase
+      const { error } = await sendTestAlert();
+      
+      if (error) {
+        console.error("Test alert error:", error);
+        setConnectionStatus("error");
+        toast.error("Connection failed", {
+          description: "Could not send test alert. Please check your setup.",
+        });
+      } else {
+        setConnectionStatus("success");
+        toast({
+          title: "Connection successful!",
+          description: "Your OBS browser source is ready to receive alerts.",
+        });
+      }
+    } catch (err) {
+      console.error("Test connection error:", err);
+      setConnectionStatus("error");
+      toast.error("Connection failed", {
+        description: "Could not send test alert. Please check your setup.",
       });
-    }, 1500);
+    } finally {
+      setIsTestingConnection(false);
+    }
   };
 
   return (
@@ -105,10 +118,9 @@ const SetupPage = () => {
       </p>
       
       <div className="mb-8">
-        <Progress value={(currentStep / 4) * 100} className="h-2" />
+        <Progress value={(currentStep / 3) * 100} className="h-2" />
         <div className="flex justify-between mt-2 text-sm text-muted-foreground">
           <span>UPI Setup</span>
-          <span>KYC</span>
           <span>Generate Links</span>
           <span>Test</span>
         </div>
@@ -148,66 +160,8 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 2: KYC */}
+        {/* Step 2: Generate Links (previously Step 3) */}
         {currentStep === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>KYC Documentation</CardTitle>
-              <CardDescription>
-                Required for monthly donations exceeding ₹50,000
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 border rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>PAN Card</Label>
-                      {kycStatus !== "none" && (
-                        <Badge variant={kycStatus === "approved" ? "outline" : "secondary"}>
-                          {kycStatus === "approved" ? "Approved" : "Pending"}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="h-32 border border-dashed rounded-md flex items-center justify-center bg-muted/50">
-                      <div className="flex flex-col items-center space-y-2 text-muted-foreground">
-                        <FileUp className="h-8 w-8" />
-                        <span className="text-sm">Upload PAN Card</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-1 border rounded-lg p-4 space-y-3">
-                    <Label>Bank Proof</Label>
-                    <div className="h-32 border border-dashed rounded-md flex items-center justify-center bg-muted/50">
-                      <div className="flex flex-col items-center space-y-2 text-muted-foreground">
-                        <FileUp className="h-8 w-8" />
-                        <span className="text-sm">Upload Bank Statement</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  You can skip this step if your monthly donations are under ₹50,000.
-                  You can complete KYC later from the Settings page.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 sm:justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(3)}>
-                  Skip for now
-                </Button>
-                <Button onClick={() => {
-                  handleFileUpload();
-                  handleNextStep();
-                }}>
-                  Upload & Continue
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Generate Links */}
-        {currentStep === 3 && (
           <Card>
             <CardHeader>
               <CardTitle>Integration Links</CardTitle>
@@ -295,8 +249,8 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 4: Connection Test */}
-        {currentStep === 4 && (
+        {/* Step 3: Connection Test (previously Step 4) */}
+        {currentStep === 3 && (
           <Card>
             <CardHeader>
               <CardTitle>Connection Test</CardTitle>
