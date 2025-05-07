@@ -41,18 +41,25 @@ const SetupPage = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
   const [obsUrl, setObsUrl] = useState<string>("");
+  const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
   
   // Fetch the OBS URL on component mount
   useEffect(() => {
     const fetchObsUrl = async () => {
       if (!user) return;
       
-      const url = await getOBSUrl();
-      if (url) {
-        setObsUrl(url);
-      } else {
-        // Fallback if getOBSUrl fails
-        setObsUrl(`${window.location.origin}/live-alerts?obs=true&user_id=${user.id}&t=${new Date().getTime()}`);
+      setIsGeneratingUrl(true);
+      try {
+        const url = await getOBSUrl();
+        if (url) {
+          setObsUrl(url);
+        } else {
+          console.error("Failed to generate OBS URL");
+        }
+      } catch (error) {
+        console.error("Error generating OBS URL:", error);
+      } finally {
+        setIsGeneratingUrl(false);
       }
     };
     
@@ -129,32 +136,33 @@ const SetupPage = () => {
     }
   };
 
-  // Function to refresh the OBS URL
-  const refreshObsUrl = async () => {
+  // Function to generate/regenerate the OBS URL
+  const generateObsUrl = async () => {
+    setIsGeneratingUrl(true);
     try {
       const url = await getOBSUrl();
       if (url) {
         setObsUrl(url);
         toast({
-          title: "URL Refreshed",
-          description: "OBS Browser Source URL has been updated.",
+          title: "URL Generated",
+          description: "New secure OBS Browser Source URL has been created.",
         });
       } else {
-        // Fallback if getOBSUrl fails
-        const fallbackUrl = `${window.location.origin}/live-alerts?obs=true&user_id=${user?.id}&t=${new Date().getTime()}`;
-        setObsUrl(fallbackUrl);
         toast({
-          title: "URL Refreshed",
-          description: "OBS Browser Source URL has been updated (fallback method).",
+          title: "Error",
+          description: "Could not generate URL. Please try again.",
+          variant: "destructive",
         });
       }
     } catch (error) {
-      console.error("Error refreshing OBS URL:", error);
+      console.error("Error generating OBS URL:", error);
       toast({
         title: "Error",
-        description: "Could not refresh OBS URL. Please try again.",
+        description: "Could not generate URL. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsGeneratingUrl(false);
     }
   };
 
@@ -256,12 +264,13 @@ const SetupPage = () => {
                 </TabsContent>
                 <TabsContent value="obs-link" className="space-y-4 pt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="obs-url">OBS Browser Source URL</Label>
+                    <Label htmlFor="obs-url">Secure OBS Browser Source URL</Label>
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={obsUrl || "Loading..."}
+                        value={obsUrl || "Click Generate to create a secure URL"}
                         readOnly
+                        className="font-mono text-xs"
                       />
                       <Button
                         variant="outline"
@@ -273,11 +282,12 @@ const SetupPage = () => {
                           } else {
                             toast({
                               title: "Error",
-                              description: "URL not available yet. Please try again.",
+                              description: "Generate a URL first before copying.",
                               variant: "destructive",
                             });
                           }
                         }}
+                        disabled={!obsUrl || isGeneratingUrl}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -285,24 +295,36 @@ const SetupPage = () => {
                         variant="outline"
                         size="icon"
                         className="ml-1"
-                        onClick={refreshObsUrl}
-                        title="Refresh URL"
+                        onClick={generateObsUrl}
+                        disabled={isGeneratingUrl}
+                        title="Generate Secure URL"
                       >
-                        <RefreshCw className="h-4 w-4" />
+                        {isGeneratingUrl ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileUp className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This URL includes your user ID and a timestamp parameter to ensure alerts are displayed correctly
+                      This secure URL contains a unique token that allows OBS to display your alerts without requiring login
                     </p>
                   </div>
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>
                     <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
                       <li>In OBS, add a new "Browser Source"</li>
-                      <li>Paste the URL above into the URL field</li>
+                      <li>Generate and copy the URL above, then paste it into the URL field</li>
                       <li>Set width to 1280 and height to 720</li>
                       <li>Check "Refresh browser when scene becomes active"</li>
                     </ol>
+                  </div>
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+                    <h4 className="font-medium mb-1">Security Note</h4>
+                    <p className="text-sm">
+                      The OBS URL contains a secure token that is tied to your account. Keep this URL private and regenerate it
+                      if you suspect it has been compromised.
+                    </p>
                   </div>
                 </TabsContent>
               </Tabs>

@@ -87,6 +87,30 @@ export type Database = {
         }
         Relationships: []
       }
+      obs_tokens: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_used_at: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_used_at?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           amount: number

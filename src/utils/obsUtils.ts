@@ -45,20 +45,98 @@ export const sendTestAlert = async () => {
 };
 
 /**
- * Generates an OBS URL with the user ID and cache-busting parameters
+ * Generates or retrieves an OBS access token for the current user
+ * This token is used to authenticate OBS browser sources
+ */
+export const getOrCreateOBSToken = async () => {
+  try {
+    // Get the current user's ID
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error("No authenticated user found");
+      return { error: "User not authenticated" };
+    }
+
+    // Check if the user already has a token
+    const { data: existingToken, error: fetchError } = await supabase
+      .from('obs_tokens')
+      .select('token')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (existingToken?.token) {
+      return { token: existingToken.token };
+    }
+    
+    // Generate a new secure token (UUID v4 for simplicity)
+    const newToken = uuidv4();
+    
+    // Insert the new token into the database
+    const { error: insertError } = await supabase
+      .from('obs_tokens')
+      .insert({
+        user_id: user.id,
+        token: newToken
+      });
+    
+    if (insertError) {
+      console.error("Error creating OBS token:", insertError);
+      return { error: insertError };
+    }
+    
+    return { token: newToken };
+  } catch (err) {
+    console.error("Exception in getOrCreateOBSToken:", err);
+    return { error: err };
+  }
+};
+
+/**
+ * Validates an OBS token and returns the associated user ID
+ */
+export const validateOBSToken = async (token: string) => {
+  try {
+    // Find the token in the database
+    const { data: tokenData, error } = await supabase
+      .from('obs_tokens')
+      .select('user_id')
+      .eq('token', token)
+      .single();
+    
+    if (error || !tokenData) {
+      console.error("Error validating OBS token:", error || "Token not found");
+      return { error: error || "Token not found" };
+    }
+    
+    // Update last_used_at timestamp
+    await supabase
+      .from('obs_tokens')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('token', token);
+    
+    return { userId: tokenData.user_id };
+  } catch (err) {
+    console.error("Exception in validateOBSToken:", err);
+    return { error: err };
+  }
+};
+
+/**
+ * Generates an OBS URL with the user's token and cache-busting parameters
  */
 export const getOBSUrl = async () => {
   try {
-    // Get the current user's ID
-    const { data } = await supabase.auth.getUser();
-    const userId = data.user?.id;
+    // Get or create an OBS token for the current user
+    const { token, error } = await getOrCreateOBSToken();
     
-    if (!userId) {
-      console.error("No authenticated user found");
+    if (error || !token) {
+      console.error("Error generating OBS token:", error);
       return null;
     }
     
-    return `${window.location.origin}/live-alerts?obs=true&user_id=${userId}&t=${new Date().getTime()}`;
+    // Create the OBS URL with the token
+    return `${window.location.origin}/live-alerts?obs=true&token=${token}&t=${new Date().getTime()}`;
   } catch (error) {
     console.error("Error generating OBS URL:", error);
     return null;

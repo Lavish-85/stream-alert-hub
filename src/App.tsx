@@ -46,8 +46,8 @@ const App = () => {
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
-                {/* OBS mode route - completely bypasses auth check */}
-                {/* This is crucial - OBS browser source needs to work without authentication */}
+                {/* LiveAlerts route - handles both regular and token-authenticated OBS mode */}
+                {/* OBS mode authentication is now handled within the component itself */}
                 <Route path="/live-alerts" element={
                   isOBSMode ? <LiveAlertsPage /> : (
                     <ProtectedRoute>

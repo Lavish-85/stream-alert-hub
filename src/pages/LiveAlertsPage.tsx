@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { validateOBSToken } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -25,20 +26,60 @@ const LiveAlertsPage = () => {
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
+  const [authStatus, setAuthStatus] = useState<'loading' | 'authenticated' | 'error'>('loading');
   const { activeStyle } = useAlertStyle();
   const { user } = useAuth();
   
-  // Get user ID from URL in OBS mode or from auth context
+  // Get parameters from URL
   const urlParams = new URLSearchParams(window.location.search);
   const isOBSMode = urlParams.get('obs') === 'true';
-  const obsUserId = urlParams.get('user_id');
-  // In OBS mode, prioritize the user_id from URL parameter
+  const obsToken = urlParams.get('token');
+  
+  // State for token-authenticated userId
+  const [tokenUserId, setTokenUserId] = useState<string | null>(null);
+  
+  // The effective userId to use for subscriptions
+  // In OBS mode with token, use the token's userId
   // Otherwise, use the authenticated user's ID
-  const userId = isOBSMode ? obsUserId : user?.id;
+  const effectiveUserId = isOBSMode && tokenUserId ? tokenUserId : user?.id;
 
-  console.log("LiveAlertsPage: Current user ID:", userId);
+  // Validate token if in OBS mode
+  useEffect(() => {
+    const validateToken = async () => {
+      // Only validate if in OBS mode and we have a token
+      if (!isOBSMode || !obsToken) {
+        if (!isOBSMode) {
+          // Not in OBS mode, so we rely on regular authentication
+          setAuthStatus(user ? 'authenticated' : 'error');
+        } else {
+          // In OBS mode but no token provided
+          console.error("OBS Mode active but no token provided");
+          setAuthStatus('error');
+        }
+        return;
+      }
+
+      console.log("LiveAlertsPage: Validating OBS token");
+      const { userId, error } = await validateOBSToken(obsToken);
+      
+      if (error || !userId) {
+        console.error("LiveAlertsPage: Token validation failed:", error);
+        setAuthStatus('error');
+        return;
+      }
+      
+      console.log("LiveAlertsPage: Token validated successfully, using user ID:", userId);
+      setTokenUserId(userId);
+      setAuthStatus('authenticated');
+    };
+    
+    validateToken();
+  }, [isOBSMode, obsToken, user]);
+
+  console.log("LiveAlertsPage: Auth Status:", authStatus);
+  console.log("LiveAlertsPage: Effective user ID:", effectiveUserId);
   console.log("LiveAlertsPage: Is OBS Mode:", isOBSMode);
-  console.log("LiveAlertsPage: OBS User ID from URL:", obsUserId);
+  console.log("LiveAlertsPage: OBS Token:", obsToken ? "Provided" : "Not provided");
   console.log("LiveAlertsPage: Active style:", activeStyle);
 
   // Format amount as Indian Rupees
@@ -55,14 +96,15 @@ const LiveAlertsPage = () => {
     return payment_id.startsWith('test_');
   };
 
+  // Set up real-time subscription when userId is available
   useEffect(() => {
-    // Don't attempt to subscribe if no user ID is available
-    if (!userId) {
-      console.log("LiveAlertsPage: No user ID available, skipping donation subscription");
+    // Don't attempt to subscribe if no valid user ID is available or if authentication failed
+    if (!effectiveUserId || authStatus !== 'authenticated') {
+      console.log("LiveAlertsPage: No valid user ID available or authentication failed, skipping donation subscription");
       return;
     }
 
-    console.log("LiveAlertsPage: Setting up subscription for user:", userId);
+    console.log("LiveAlertsPage: Setting up subscription for user:", effectiveUserId);
 
     // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
@@ -72,7 +114,7 @@ const LiveAlertsPage = () => {
           event: 'INSERT', 
           schema: 'public', 
           table: 'donations',
-          filter: `user_id=eq.${userId}`
+          filter: `user_id=eq.${effectiveUserId}`
         }, 
         (payload) => {
           const newDonation = payload.new as Donation;
@@ -110,14 +152,14 @@ const LiveAlertsPage = () => {
 
     // Fetch the initial 20 most recent donations for this user
     const fetchRecentDonations = async () => {
-      if (!userId) return;
+      if (!effectiveUserId) return;
       
-      console.log("LiveAlertsPage: Fetching recent donations for user:", userId);
+      console.log("LiveAlertsPage: Fetching recent donations for user:", effectiveUserId);
       
       const { data, error } = await supabase
         .from('donations')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false })
         .limit(20);
       
@@ -138,7 +180,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [userId, activeStyle?.duration, isOBSMode]);
+  }, [effectiveUserId, authStatus, activeStyle?.duration, isOBSMode]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -167,17 +209,29 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // Generate OBS URL with timestamp to prevent caching
-  const getOBSUrl = async () => {
-    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    let url = `${baseUrl}&t=${new Date().getTime()}`;
-    
-    if (user?.id) {
-      url += `&user_id=${user.id}`;
-    }
-    
-    return url;
-  };
+  // If in OBS mode and authentication failed, show an error
+  if (isOBSMode && authStatus === 'error') {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background p-4">
+        <Alert variant="destructive" className="max-w-md shadow-lg">
+          <AlertTriangle className="h-6 w-6" />
+          <AlertTitle>Authentication Failed</AlertTitle>
+          <AlertDescription>
+            The OBS authentication token is invalid or expired. Please generate a new OBS link in the StreamDonate dashboard.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // If in OBS mode and still loading authentication, show a loading state
+  if (isOBSMode && authStatus === 'loading') {
+    return (
+      <div className="flex items-center justify-center h-screen bg-transparent">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary"></div>
+      </div>
+    );
+  }
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
   if (isOBSMode) {
@@ -241,6 +295,7 @@ const LiveAlertsPage = () => {
     );
   }
 
+  // Normal mode (not OBS mode)
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -270,22 +325,22 @@ const LiveAlertsPage = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <p className="font-medium">URL for OBS Browser Source:</p>
+              <p className="font-medium">Secure URL for OBS Browser Source:</p>
               <div className="flex">
                 <input
                   type="text"
                   readOnly
-                  value={userId ? `${window.location.origin}/live-alerts?obs=true&user_id=${userId}` : "Loading..."}
+                  value={user ? "Loading secure OBS URL..." : "Please sign in"}
                   className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
                 />
                 <button 
-                  className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
+                  className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90 disabled:opacity-50"
                   onClick={async () => {
                     const url = await getOBSUrl();
                     if (url) {
                       navigator.clipboard.writeText(url);
                       toast("Copied!", {
-                        description: "OBS URL copied to clipboard"
+                        description: "Secure OBS URL copied to clipboard"
                       });
                     } else {
                       toast("Error", {
@@ -293,12 +348,13 @@ const LiveAlertsPage = () => {
                       });
                     }
                   }}
+                  disabled={!user}
                 >
-                  Copy
+                  Generate & Copy
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This URL includes your unique user ID to ensure you only see your own donation alerts
+                This secure URL contains a unique token that allows OBS to display your alerts without requiring login
               </p>
             </div>
 
@@ -306,11 +362,19 @@ const LiveAlertsPage = () => {
               <p className="font-medium">Instructions:</p>
               <ol className="list-decimal list-inside space-y-2">
                 <li>In OBS Studio, add a new "Browser" source</li>
-                <li>Paste the URL above into the URL field</li>
+                <li>Click "Generate & Copy" and paste the URL into the URL field</li>
                 <li>Set the width to 1280 and height to 720</li>
                 <li>Enable "Refresh browser when scene becomes active"</li>
                 <li>Click OK to save</li>
               </ol>
+            </div>
+            
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+              <h3 className="font-medium mb-1">Security Note</h3>
+              <p className="text-sm">
+                The OBS URL contains a secure token that is tied to your account. Keep this URL private and regenerate it
+                if you suspect it has been compromised.
+              </p>
             </div>
             
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
