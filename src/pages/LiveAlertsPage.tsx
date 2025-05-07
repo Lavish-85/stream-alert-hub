@@ -8,7 +8,7 @@ import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { validateOBSToken } from "@/utils/obsUtils";
+import { validateOBSToken, getOBSUrl } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {

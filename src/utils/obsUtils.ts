@@ -58,17 +58,26 @@ export const getOrCreateOBSToken = async () => {
       return { error: "User not authenticated" };
     }
 
+    console.log("Getting or creating OBS token for user:", user.id);
+
     // Check if the user already has a token
     const { data: existingToken, error: fetchError } = await supabase
       .from('obs_tokens')
       .select('token')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error("Error fetching existing token:", fetchError);
+      return { error: fetchError };
+    }
     
     if (existingToken?.token) {
+      console.log("Found existing OBS token");
       return { token: existingToken.token };
     }
     
+    console.log("Creating new OBS token");
     // Generate a new secure token (UUID v4 for simplicity)
     const newToken = uuidv4();
     
@@ -97,17 +106,26 @@ export const getOrCreateOBSToken = async () => {
  */
 export const validateOBSToken = async (token: string) => {
   try {
+    console.log("Validating OBS token:", token);
+    
     // Find the token in the database
     const { data: tokenData, error } = await supabase
       .from('obs_tokens')
       .select('user_id')
       .eq('token', token)
-      .single();
+      .maybeSingle();
     
-    if (error || !tokenData) {
-      console.error("Error validating OBS token:", error || "Token not found");
-      return { error: error || "Token not found" };
+    if (error) {
+      console.error("Database error validating OBS token:", error);
+      return { error: error };
     }
+    
+    if (!tokenData) {
+      console.error("Token not found in database");
+      return { error: "Token not found" };
+    }
+    
+    console.log("Token validated successfully for user:", tokenData.user_id);
     
     // Update last_used_at timestamp
     await supabase
