@@ -106,12 +106,17 @@ export const getOrCreateOBSToken = async () => {
  */
 export const validateOBSToken = async (token: string) => {
   try {
+    if (!token) {
+      console.error("No token provided");
+      return { error: "No token provided" };
+    }
+    
     console.log("Validating OBS token:", token);
     
     // Find the token in the database
     const { data: tokenData, error } = await supabase
       .from('obs_tokens')
-      .select('user_id')
+      .select('user_id, created_at')
       .eq('token', token)
       .maybeSingle();
     
@@ -141,19 +146,77 @@ export const validateOBSToken = async (token: string) => {
 };
 
 /**
+ * Regenerates a new OBS token for the current user, invalidating any previous ones
+ */
+export const regenerateOBSToken = async () => {
+  try {
+    // Get the current user's ID
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error("No authenticated user found");
+      return { error: "User not authenticated" };
+    }
+
+    console.log("Regenerating OBS token for user:", user.id);
+    
+    // Generate a new secure token
+    const newToken = uuidv4();
+    
+    // First delete any existing tokens for this user
+    const { error: deleteError } = await supabase
+      .from('obs_tokens')
+      .delete()
+      .eq('user_id', user.id);
+    
+    if (deleteError) {
+      console.error("Error deleting existing tokens:", deleteError);
+      return { error: deleteError };
+    }
+    
+    // Create a new token
+    const { error: insertError } = await supabase
+      .from('obs_tokens')
+      .insert({
+        user_id: user.id,
+        token: newToken
+      });
+    
+    if (insertError) {
+      console.error("Error creating regenerated OBS token:", insertError);
+      return { error: insertError };
+    }
+    
+    return { token: newToken };
+  } catch (err) {
+    console.error("Exception in regenerateOBSToken:", err);
+    return { error: err };
+  }
+};
+
+/**
  * Generates an OBS URL with the user's token and cache-busting parameters
  */
-export const getOBSUrl = async () => {
+export const getOBSUrl = async (forceRegenerateToken = false) => {
   try {
-    // Get or create an OBS token for the current user
-    const { token, error } = await getOrCreateOBSToken();
+    let tokenResult;
+    
+    if (forceRegenerateToken) {
+      // Force regenerate a new token (will invalidate previous ones)
+      tokenResult = await regenerateOBSToken();
+    } else {
+      // Get or create an OBS token for the current user
+      tokenResult = await getOrCreateOBSToken();
+    }
+    
+    const { token, error } = tokenResult;
     
     if (error || !token) {
       console.error("Error generating OBS token:", error);
       return null;
     }
     
-    // Create the OBS URL with the token
+    // Create the OBS URL with the token and a timestamp to prevent caching
     return `${window.location.origin}/live-alerts?obs=true&token=${token}&t=${new Date().getTime()}`;
   } catch (error) {
     console.error("Error generating OBS URL:", error);

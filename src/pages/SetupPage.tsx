@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -137,15 +138,17 @@ const SetupPage = () => {
   };
 
   // Function to generate/regenerate the OBS URL
-  const generateObsUrl = async () => {
+  const generateObsUrl = async (forceRegenerateToken = false) => {
     setIsGeneratingUrl(true);
     try {
-      const url = await getOBSUrl();
+      const url = await getOBSUrl(forceRegenerateToken);
       if (url) {
         setObsUrl(url);
         toast({
-          title: "URL Generated",
-          description: "New secure OBS Browser Source URL has been created.",
+          title: forceRegenerateToken ? "URL Regenerated" : "URL Generated",
+          description: forceRegenerateToken 
+            ? "New secure OBS Browser Source URL has been created. Previous URL is no longer valid."
+            : "Secure OBS Browser Source URL has been created.",
         });
       } else {
         toast({
@@ -295,7 +298,7 @@ const SetupPage = () => {
                         variant="outline"
                         size="icon"
                         className="ml-1"
-                        onClick={generateObsUrl}
+                        onClick={() => generateObsUrl(false)}
                         disabled={isGeneratingUrl}
                         title="Generate Secure URL"
                       >
@@ -310,6 +313,32 @@ const SetupPage = () => {
                       This secure URL contains a unique token that allows OBS to display your alerts without requiring login
                     </p>
                   </div>
+
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
+                    <div className="flex items-start space-x-2">
+                      <RefreshCw className="h-5 w-5 text-rose-600 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-rose-800">Regenerate Token</h3>
+                        <p className="text-sm text-rose-600 mb-2">
+                          Having authentication issues? Generate a new token to replace the existing one.
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700"
+                          onClick={() => generateObsUrl(true)}
+                          disabled={isGeneratingUrl}
+                        >
+                          {isGeneratingUrl ? (
+                            <><RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Regenerating...</>
+                          ) : (
+                            <>Regenerate New Token</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>
                     <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
@@ -401,6 +430,24 @@ const SetupPage = () => {
                   <li>Customize your alert appearance in the "Alerts" tab</li>
                   <li>Track donations in the "Analytics" tab</li>
                 </ul>
+              </div>
+
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="flex items-start space-x-2">
+                  <RefreshCw className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-blue-800">Troubleshooting</h3>
+                    <p className="text-sm text-blue-600 mb-2">
+                      If your OBS is showing authentication errors, try these steps:
+                    </p>
+                    <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
+                      <li>Go back to the "Generate Links" step and click "Regenerate New Token"</li>
+                      <li>Copy the new URL and update it in your OBS Browser Source</li>
+                      <li>Make sure to check "Refresh browser when scene becomes active" in OBS</li>
+                      <li>Sometimes you need to completely remove and re-add the Browser Source in OBS</li>
+                    </ol>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

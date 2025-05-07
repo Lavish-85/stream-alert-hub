@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -386,6 +387,19 @@ const LiveAlertsPage = () => {
                   <>No alert style selected. Visit the Alerts page to choose and customize one.</>
                 )}
               </p>
+            </div>
+            
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="flex items-start space-x-2">
+                <RefreshCw className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-blue-800">Authentication Issues?</h3>
+                  <p className="text-sm text-blue-600 mb-2">
+                    If your OBS is showing authentication errors, go to the Setup page and click "Regenerate New Token".
+                    This will create a new token and invalidate the old one.
+                  </p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
