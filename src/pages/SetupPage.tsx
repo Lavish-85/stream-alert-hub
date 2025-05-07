@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -24,6 +23,7 @@ import {
   QrCode,
   RefreshCw,
   XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -314,6 +314,18 @@ const SetupPage = () => {
                     </p>
                   </div>
 
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                      <h3 className="font-medium text-yellow-800">Important: OBS Settings</h3>
+                    </div>
+                    <ul className="text-sm text-yellow-700 mt-2 space-y-1 ml-6 list-disc">
+                      <li><strong>Always enable "Refresh browser when scene becomes active"</strong> in OBS browser source settings</li>
+                      <li>Set width to 1280 and height to 720</li>
+                      <li>If you see authentication errors, use the "Regenerate New Token" button below</li>
+                    </ul>
+                  </div>
+
                   <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
                     <div className="flex items-start space-x-2">
                       <RefreshCw className="h-5 w-5 text-rose-600 mt-0.5" />
@@ -321,6 +333,7 @@ const SetupPage = () => {
                         <h3 className="font-medium text-rose-800">Regenerate Token</h3>
                         <p className="text-sm text-rose-600 mb-2">
                           Having authentication issues? Generate a new token to replace the existing one.
+                          <strong> This will invalidate previous links.</strong>
                         </p>
                         <Button 
                           variant="outline" 
@@ -345,15 +358,20 @@ const SetupPage = () => {
                       <li>In OBS, add a new "Browser Source"</li>
                       <li>Generate and copy the URL above, then paste it into the URL field</li>
                       <li>Set width to 1280 and height to 720</li>
-                      <li>Check "Refresh browser when scene becomes active"</li>
+                      <li><strong className="text-primary">Check "Refresh browser when scene becomes active"</strong></li>
+                      <li>Click "Refresh cache of current page" if you regenerate the token</li>
                     </ol>
                   </div>
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
-                    <h4 className="font-medium mb-1">Security Note</h4>
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800">
+                    <h4 className="font-medium mb-1">Troubleshooting</h4>
                     <p className="text-sm">
-                      The OBS URL contains a secure token that is tied to your account. Keep this URL private and regenerate it
-                      if you suspect it has been compromised.
+                      If you still see authentication errors after regenerating:
                     </p>
+                    <ul className="list-disc list-inside text-sm mt-1">
+                      <li>Clear your browser cache</li>
+                      <li>Try completely removing and re-adding the browser source in OBS</li>
+                      <li>Make sure you've updated the URL in OBS after regenerating the token</li>
+                    </ul>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -445,6 +463,7 @@ const SetupPage = () => {
                       <li>Copy the new URL and update it in your OBS Browser Source</li>
                       <li>Make sure to check "Refresh browser when scene becomes active" in OBS</li>
                       <li>Sometimes you need to completely remove and re-add the Browser Source in OBS</li>
+                      <li>Try clearing your browser cache if you're still having issues</li>
                     </ol>
                   </div>
                 </div>

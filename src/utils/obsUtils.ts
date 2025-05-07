@@ -86,7 +86,9 @@ export const getOrCreateOBSToken = async () => {
       .from('obs_tokens')
       .insert({
         user_id: user.id,
-        token: newToken
+        token: newToken,
+        created_at: new Date().toISOString(),
+        last_used_at: new Date().toISOString()
       });
     
     if (insertError) {
@@ -175,6 +177,7 @@ export const regenerateOBSToken = async () => {
     const newToken = uuidv4();
     
     // First delete any existing tokens for this user
+    // FIX: Use .eq() to properly filter by user_id
     const { error: deleteError } = await supabase
       .from('obs_tokens')
       .delete()
@@ -229,8 +232,11 @@ export const getOBSUrl = async (forceRegenerateToken = false) => {
       return null;
     }
     
-    // Create the OBS URL with the token and a timestamp to prevent caching
-    return `${window.location.origin}/live-alerts?obs=true&token=${token}&t=${new Date().getTime()}`;
+    // Create the OBS URL with the token and stronger cache-busting parameters
+    // Add a unique ID to prevent caching issues
+    const uniqueId = uuidv4().substring(0, 8);
+    const timestamp = new Date().getTime();
+    return `${window.location.origin}/live-alerts?obs=true&token=${token}&t=${timestamp}&uid=${uniqueId}`;
   } catch (error) {
     console.error("Error generating OBS URL:", error);
     return null;

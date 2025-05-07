@@ -27,7 +27,8 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const [authStatus, setAuthStatus] = useState<'loading' | 'authenticated' | 'error'>('loading');
-  const { activeStyle } = useAlertStyle();
+  const [authError, setAuthError] = useState<string | null>(null);
+  const { activeStyle, isLoading: styleLoading } = useAlertStyle();
   const { user } = useAuth();
   
   // Get parameters from URL
@@ -54,6 +55,7 @@ const LiveAlertsPage = () => {
         } else {
           // In OBS mode but no token provided
           console.error("OBS Mode active but no token provided");
+          setAuthError("No authentication token provided");
           setAuthStatus('error');
         }
         return;
@@ -64,6 +66,7 @@ const LiveAlertsPage = () => {
       
       if (error || !userId) {
         console.error("LiveAlertsPage: Token validation failed:", error);
+        setAuthError(error?.toString() || "Token validation failed");
         setAuthStatus('error');
         return;
       }
@@ -77,10 +80,12 @@ const LiveAlertsPage = () => {
   }, [isOBSMode, obsToken, user]);
 
   console.log("LiveAlertsPage: Auth Status:", authStatus);
+  console.log("LiveAlertsPage: Auth Error:", authError);
   console.log("LiveAlertsPage: Effective user ID:", effectiveUserId);
   console.log("LiveAlertsPage: Is OBS Mode:", isOBSMode);
   console.log("LiveAlertsPage: OBS Token:", obsToken ? "Provided" : "Not provided");
   console.log("LiveAlertsPage: Active style:", activeStyle);
+  console.log("LiveAlertsPage: Style loading:", styleLoading);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -217,7 +222,7 @@ const LiveAlertsPage = () => {
           <AlertTriangle className="h-6 w-6" />
           <AlertTitle>Authentication Failed</AlertTitle>
           <AlertDescription>
-            The OBS authentication token is invalid or expired. Please generate a new OBS link in the StreamDonate dashboard.
+            {authError || "The OBS authentication token is invalid or expired. Please generate a new OBS link in the StreamDonate dashboard."}
             <div className="mt-4">
               <a 
                 href="/" 
@@ -373,7 +378,7 @@ const LiveAlertsPage = () => {
                 <li>In OBS Studio, add a new "Browser" source</li>
                 <li>Click "Generate & Copy" and paste the URL into the URL field</li>
                 <li>Set the width to 1280 and height to 720</li>
-                <li>Enable "Refresh browser when scene becomes active"</li>
+                <li><strong className="text-primary">Enable "Refresh browser when scene becomes active"</strong></li>
                 <li>Click OK to save</li>
               </ol>
             </div>
@@ -421,6 +426,25 @@ const LiveAlertsPage = () => {
                   >
                     Regenerate Now
                   </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="h-5 w-5 text-rose-600 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-rose-800">Still Having Issues?</h3>
+                  <p className="text-sm text-rose-600 mb-2">
+                    If you're still seeing authentication errors after regenerating the token:
+                  </p>
+                  <ol className="text-sm text-rose-700 list-decimal list-inside space-y-1">
+                    <li>Clear your browser cache or try a different browser</li>
+                    <li>In OBS, right-click your browser source and select "Properties"</li>
+                    <li>Click "Refresh cache of current page"</li>
+                    <li>Check that "Refresh browser when scene becomes active" is enabled</li>
+                    <li>Try completely removing and re-adding the browser source</li>
+                  </ol>
                 </div>
               </div>
             </div>
