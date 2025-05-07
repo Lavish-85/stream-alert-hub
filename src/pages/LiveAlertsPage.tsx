@@ -218,6 +218,15 @@ const LiveAlertsPage = () => {
           <AlertTitle>Authentication Failed</AlertTitle>
           <AlertDescription>
             The OBS authentication token is invalid or expired. Please generate a new OBS link in the StreamDonate dashboard.
+            <div className="mt-4">
+              <a 
+                href="/" 
+                className="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Return to Dashboard
+              </a>
+            </div>
           </AlertDescription>
         </Alert>
       </div>
@@ -397,6 +406,21 @@ const LiveAlertsPage = () => {
                     If your OBS is showing authentication errors, go to the Setup page and click "Regenerate New Token".
                     This will create a new token and invalidate the old one.
                   </p>
+                  <button
+                    onClick={async () => {
+                      const url = await getOBSUrl(true);
+                      if (url) {
+                        navigator.clipboard.writeText(url);
+                        toast("New token generated!", {
+                          description: "New secure OBS URL copied to clipboard. Make sure to update your OBS source."
+                        });
+                      }
+                    }}
+                    className="text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md"
+                    disabled={!user}
+                  >
+                    Regenerate Now
+                  </button>
                 </div>
               </div>
             </div>

@@ -116,7 +116,7 @@ export const validateOBSToken = async (token: string) => {
     // Find the token in the database
     const { data: tokenData, error } = await supabase
       .from('obs_tokens')
-      .select('user_id, created_at')
+      .select('user_id, created_at, last_used_at')
       .eq('token', token)
       .maybeSingle();
     
@@ -128,6 +128,17 @@ export const validateOBSToken = async (token: string) => {
     if (!tokenData) {
       console.error("Token not found in database");
       return { error: "Token not found" };
+    }
+    
+    // Calculate token age in days to check for expiration
+    const createdAt = new Date(tokenData.created_at);
+    const now = new Date();
+    const tokenAgeInDays = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    
+    // Token expiration check - expires after 30 days of creation
+    if (tokenAgeInDays > 30) {
+      console.error("Token expired (older than 30 days)");
+      return { error: "Token expired" };
     }
     
     console.log("Token validated successfully for user:", tokenData.user_id);
@@ -179,7 +190,9 @@ export const regenerateOBSToken = async () => {
       .from('obs_tokens')
       .insert({
         user_id: user.id,
-        token: newToken
+        token: newToken,
+        created_at: new Date().toISOString(),
+        last_used_at: new Date().toISOString()
       });
     
     if (insertError) {
