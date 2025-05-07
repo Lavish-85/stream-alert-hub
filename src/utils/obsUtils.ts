@@ -48,14 +48,19 @@ export const sendTestAlert = async () => {
  * Generates an OBS URL with the user ID and cache-busting parameters
  */
 export const getOBSUrl = async () => {
-  // Get the current user's ID
-  const { data } = await supabase.auth.getUser();
-  const userId = data.user?.id;
-  
-  if (!userId) {
-    console.error("No authenticated user found");
-    return `${window.location.origin}/live-alerts?obs=true&t=${new Date().getTime()}`;
+  try {
+    // Get the current user's ID
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+    
+    if (!userId) {
+      console.error("No authenticated user found");
+      return null;
+    }
+    
+    return `${window.location.origin}/live-alerts?obs=true&user_id=${userId}&t=${new Date().getTime()}`;
+  } catch (error) {
+    console.error("Error generating OBS URL:", error);
+    return null;
   }
-  
-  return `${window.location.origin}/live-alerts?obs=true&user_id=${userId}&t=${new Date().getTime()}`;
 };

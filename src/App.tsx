@@ -46,7 +46,8 @@ const App = () => {
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
-                {/* OBS mode route bypasses Layout and auth */}
+                {/* OBS mode route - completely bypasses auth check */}
+                {/* This is crucial - OBS browser source needs to work without authentication */}
                 <Route path="/live-alerts" element={
                   isOBSMode ? <LiveAlertsPage /> : (
                     <ProtectedRoute>

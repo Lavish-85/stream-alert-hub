@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -31,9 +30,11 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTestAlert, getOBSUrl } from "@/utils/obsUtils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SetupPage = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [upiId, setUpiId] = useState("");
   const [upiIdError, setUpiIdError] = useState("");
@@ -44,12 +45,21 @@ const SetupPage = () => {
   // Fetch the OBS URL on component mount
   useEffect(() => {
     const fetchObsUrl = async () => {
+      if (!user) return;
+      
       const url = await getOBSUrl();
-      setObsUrl(url);
+      if (url) {
+        setObsUrl(url);
+      } else {
+        // Fallback if getOBSUrl fails
+        setObsUrl(`${window.location.origin}/live-alerts?obs=true&user_id=${user.id}&t=${new Date().getTime()}`);
+      }
     };
     
-    fetchObsUrl();
-  }, []);
+    if (user) {
+      fetchObsUrl();
+    }
+  }, [user]);
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -121,13 +131,31 @@ const SetupPage = () => {
 
   // Function to refresh the OBS URL
   const refreshObsUrl = async () => {
-    const url = await getOBSUrl();
-    setObsUrl(url);
-    
-    toast({
-      title: "URL Refreshed",
-      description: "OBS Browser Source URL has been updated.",
-    });
+    try {
+      const url = await getOBSUrl();
+      if (url) {
+        setObsUrl(url);
+        toast({
+          title: "URL Refreshed",
+          description: "OBS Browser Source URL has been updated.",
+        });
+      } else {
+        // Fallback if getOBSUrl fails
+        const fallbackUrl = `${window.location.origin}/live-alerts?obs=true&user_id=${user?.id}&t=${new Date().getTime()}`;
+        setObsUrl(fallbackUrl);
+        toast({
+          title: "URL Refreshed",
+          description: "OBS Browser Source URL has been updated (fallback method).",
+        });
+      }
+    } catch (error) {
+      console.error("Error refreshing OBS URL:", error);
+      toast({
+        title: "Error",
+        description: "Could not refresh OBS URL. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -232,17 +260,24 @@ const SetupPage = () => {
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={obsUrl}
+                        value={obsUrl || "Loading..."}
                         readOnly
                       />
                       <Button
                         variant="outline"
                         size="icon"
                         className="ml-2"
-                        onClick={() => handleCopy(
-                          obsUrl,
-                          "OBS URL copied to clipboard"
-                        )}
+                        onClick={() => {
+                          if (obsUrl) {
+                            handleCopy(obsUrl, "OBS URL copied to clipboard");
+                          } else {
+                            toast({
+                              title: "Error",
+                              description: "URL not available yet. Please try again.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>

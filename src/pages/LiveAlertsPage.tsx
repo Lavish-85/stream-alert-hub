@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -33,6 +32,8 @@ const LiveAlertsPage = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const isOBSMode = urlParams.get('obs') === 'true';
   const obsUserId = urlParams.get('user_id');
+  // In OBS mode, prioritize the user_id from URL parameter
+  // Otherwise, use the authenticated user's ID
   const userId = isOBSMode ? obsUserId : user?.id;
 
   console.log("LiveAlertsPage: Current user ID:", userId);
@@ -245,7 +246,7 @@ const LiveAlertsPage = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">Live Donation Alerts</h1>
-          <p className="text-muted-foreground">Watch donations as they come in real-time</p>
+          <p className="text-muted-foreground mb-6">Watch donations as they come in real-time</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center mt-2 sm:mt-0">
           <Badge 
@@ -281,10 +282,16 @@ const LiveAlertsPage = () => {
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90"
                   onClick={async () => {
                     const url = await getOBSUrl();
-                    navigator.clipboard.writeText(url);
-                    toast("Copied!", {
-                      description: "OBS URL copied to clipboard"
-                    });
+                    if (url) {
+                      navigator.clipboard.writeText(url);
+                      toast("Copied!", {
+                        description: "OBS URL copied to clipboard"
+                      });
+                    } else {
+                      toast("Error", {
+                        description: "Could not generate URL. Please try again."
+                      });
+                    }
                   }}
                 >
                   Copy
