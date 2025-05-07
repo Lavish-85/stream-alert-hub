@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -38,12 +39,17 @@ const SetupPage = () => {
   const [upiIdError, setUpiIdError] = useState("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
-
-  // Generate OBS URL with timestamp to prevent caching
-  const getOBSUrl = () => {
-    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-    return `${baseUrl}&t=${new Date().getTime()}`;
-  };
+  const [obsUrl, setObsUrl] = useState<string>("");
+  
+  // Fetch the OBS URL on component mount
+  useEffect(() => {
+    const fetchObsUrl = async () => {
+      const url = await getOBSUrl();
+      setObsUrl(url);
+    };
+    
+    fetchObsUrl();
+  }, []);
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -69,8 +75,8 @@ const SetupPage = () => {
     }
   };
 
-  const handleCopy = (text: string, message: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = async (text: string, message: string) => {
+    await navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
       description: message,
@@ -111,6 +117,17 @@ const SetupPage = () => {
     } finally {
       setIsTestingConnection(false);
     }
+  };
+
+  // Function to refresh the OBS URL
+  const refreshObsUrl = async () => {
+    const url = await getOBSUrl();
+    setObsUrl(url);
+    
+    toast({
+      title: "URL Refreshed",
+      description: "OBS Browser Source URL has been updated.",
+    });
   };
 
   return (
@@ -215,7 +232,7 @@ const SetupPage = () => {
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={getOBSUrl()}
+                        value={obsUrl}
                         readOnly
                       />
                       <Button
@@ -223,15 +240,24 @@ const SetupPage = () => {
                         size="icon"
                         className="ml-2"
                         onClick={() => handleCopy(
-                          getOBSUrl(),
+                          obsUrl,
                           "OBS URL copied to clipboard"
                         )}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="ml-1"
+                        onClick={refreshObsUrl}
+                        title="Refresh URL"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This URL includes a timestamp parameter to prevent caching when styles change
+                      This URL includes your user ID and a timestamp parameter to ensure alerts are displayed correctly
                     </p>
                   </div>
                   <div className="bg-muted p-4 rounded-lg">
