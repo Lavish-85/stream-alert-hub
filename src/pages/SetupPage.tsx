@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Card,
   CardContent,
@@ -39,17 +38,12 @@ const SetupPage = () => {
   const [upiIdError, setUpiIdError] = useState("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
-  const [obsUrl, setObsUrl] = useState<string>("");
 
-  useEffect(() => {
-    // Generate OBS URL when component mounts
-    const fetchObsUrl = async () => {
-      const url = await getOBSUrl();
-      setObsUrl(url);
-    };
-    
-    fetchObsUrl();
-  }, []);
+  // Generate OBS URL with timestamp to prevent caching
+  const getOBSUrl = () => {
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    return `${baseUrl}&t=${new Date().getTime()}`;
+  };
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -68,6 +62,7 @@ const SetupPage = () => {
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!validateUpiId()) return;
+      // Skip to step 3 (previously step 2 was KYC)
       setCurrentStep(2);
     } else {
       setCurrentStep(currentStep + 1);
@@ -87,9 +82,8 @@ const SetupPage = () => {
     setConnectionStatus("unknown");
     
     try {
-      console.log("Testing OBS connection...");
       // Send a test alert through Supabase
-      const { error, data } = await sendTestAlert();
+      const { error } = await sendTestAlert();
       
       if (error) {
         console.error("Test alert error:", error);
@@ -100,7 +94,6 @@ const SetupPage = () => {
           variant: "destructive",
         });
       } else {
-        console.log("Test alert sent successfully:", data);
         setConnectionStatus("success");
         toast({
           title: "Connection successful!",
@@ -170,7 +163,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 2: Generate Links */}
+        {/* Step 2: Generate Links (previously Step 3) */}
         {currentStep === 2 && (
           <Card>
             <CardHeader>
@@ -222,7 +215,7 @@ const SetupPage = () => {
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={obsUrl}
+                        value={getOBSUrl()}
                         readOnly
                       />
                       <Button
@@ -230,7 +223,7 @@ const SetupPage = () => {
                         size="icon"
                         className="ml-2"
                         onClick={() => handleCopy(
-                          obsUrl,
+                          getOBSUrl(),
                           "OBS URL copied to clipboard"
                         )}
                       >
@@ -238,7 +231,7 @@ const SetupPage = () => {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This URL includes your user ID and timestamp parameters to ensure you see your alerts
+                      This URL includes a timestamp parameter to prevent caching when styles change
                     </p>
                   </div>
                   <div className="bg-muted p-4 rounded-lg">
@@ -259,7 +252,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 3: Connection Test */}
+        {/* Step 3: Connection Test (previously Step 4) */}
         {currentStep === 3 && (
           <Card>
             <CardHeader>
@@ -319,15 +312,11 @@ const SetupPage = () => {
               </div>
 
               <div className="bg-muted p-4 rounded-lg">
-                <h4 className="font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  Troubleshooting Tips:
-                </h4>
+                <h4 className="font-semibold">Next Steps:</h4>
                 <ul className="space-y-2 mt-2 list-disc list-inside text-sm">
-                  <li>Make sure you copied the exact URL with all parameters</li>
-                  <li>Ensure you're logged in with the same account on both this page and OBS</li>
-                  <li>Try refreshing the browser source in OBS</li>
-                  <li>Check that you're connected to the internet on both devices</li>
+                  <li>Share your UPI link or QR code with viewers</li>
+                  <li>Customize your alert appearance in the "Alerts" tab</li>
+                  <li>Track donations in the "Analytics" tab</li>
                 </ul>
               </div>
             </CardContent>

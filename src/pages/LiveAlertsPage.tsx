@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -18,6 +19,7 @@ interface Donation {
   message: string | null;
   created_at: string;
   user_id: string | null;
+  is_test?: boolean;
 }
 
 const LiveAlertsPage = () => {
@@ -34,12 +36,8 @@ const LiveAlertsPage = () => {
   const obsUserId = urlParams.get('user_id');
   const userId = isOBSMode ? obsUserId : user?.id;
 
-  console.log("LiveAlertsPage - Mode:", isOBSMode ? "OBS" : "Normal");
-  console.log("LiveAlertsPage - User ID source:", isOBSMode ? "URL parameter" : "Auth context");
-  console.log("LiveAlertsPage - User ID:", userId);
-  console.log("LiveAlertsPage - OBS User ID from URL:", obsUserId);
-  console.log("LiveAlertsPage - Auth User ID:", user?.id);
-  console.log("LiveAlertsPage - Active style:", activeStyle);
+  console.log("Current user ID:", userId);
+  console.log("Current active style:", activeStyle);
 
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -50,19 +48,12 @@ const LiveAlertsPage = () => {
     }).format(amount);
   };
 
-  // Check if a donation is likely a test based on payment_id prefix
-  const isTestDonation = (donation: Donation) => {
-    return donation.payment_id.startsWith('test_');
-  };
-
   useEffect(() => {
     // Don't attempt to subscribe if no user ID is available
     if (!userId) {
-      console.log("LiveAlertsPage - No user ID available, skipping donation subscription");
+      console.log("No user ID available, skipping donation subscription");
       return;
     }
-
-    console.log("LiveAlertsPage - Setting up subscription for user:", userId);
 
     // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
@@ -76,7 +67,7 @@ const LiveAlertsPage = () => {
         }, 
         (payload) => {
           const newDonation = payload.new as Donation;
-          console.log('LiveAlertsPage - New donation received:', newDonation);
+          console.log('New donation received:', newDonation);
           
           // Add to alerts list
           setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
@@ -86,7 +77,7 @@ const LiveAlertsPage = () => {
           
           // Show toast notification if not in OBS mode
           if (!isOBSMode) {
-            const isTest = isTestDonation(newDonation) ? " (Test)" : "";
+            const isTest = newDonation.is_test ? " (Test)" : "";
             toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
               description: newDonation.message || "No message",
             });
@@ -100,7 +91,7 @@ const LiveAlertsPage = () => {
         }
       )
       .subscribe((status) => {
-        console.log('LiveAlertsPage - Subscription status:', status);
+        console.log('Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           setConnected(true);
         } else {
@@ -112,8 +103,6 @@ const LiveAlertsPage = () => {
     const fetchRecentDonations = async () => {
       if (!userId) return;
       
-      console.log("LiveAlertsPage - Fetching recent donations for user:", userId);
-      
       const { data, error } = await supabase
         .from('donations')
         .select('*')
@@ -122,12 +111,11 @@ const LiveAlertsPage = () => {
         .limit(20);
       
       if (error) {
-        console.error('LiveAlertsPage - Error fetching recent donations:', error);
+        console.error('Error fetching recent donations:', error);
         return;
       }
       
       if (data) {
-        console.log('LiveAlertsPage - Fetched donations:', data.length);
         setAlerts(data);
       }
     };
@@ -136,10 +124,9 @@ const LiveAlertsPage = () => {
 
     // Cleanup on unmount
     return () => {
-      console.log("LiveAlertsPage - Cleaning up subscription");
       channel.unsubscribe();
     };
-  }, [userId, activeStyle?.duration, isOBSMode]);
+  }, [userId, activeStyle?.duration]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -170,19 +157,14 @@ const LiveAlertsPage = () => {
 
   // Generate OBS URL with timestamp to prevent caching
   const getOBSUrl = async () => {
-    try {
-      const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
-      let url = `${baseUrl}&t=${new Date().getTime()}`;
-      
-      if (user?.id) {
-        url += `&user_id=${user.id}`;
-      }
-      
-      return url;
-    } catch (error) {
-      console.error("Error generating OBS URL:", error);
-      return `${window.location.origin}/live-alerts?obs=true&t=${new Date().getTime()}`;
+    const baseUrl = `${window.location.origin}/live-alerts?obs=true`;
+    let url = `${baseUrl}&t=${new Date().getTime()}`;
+    
+    if (user?.id) {
+      url += `&user_id=${user.id}`;
     }
+    
+    return url;
   };
 
   // If in OBS mode, render a simplified version with no sidebars or other UI elements
@@ -198,8 +180,7 @@ const LiveAlertsPage = () => {
     
     const alertStyle = activeStyle || getFallbackStyle();
     
-    console.log("LiveAlertsPage - Using alert style in OBS mode:", alertStyle);
-    console.log("LiveAlertsPage - Last alert:", lastAlert);
+    console.log("Using alert style in OBS mode:", alertStyle);
     
     return (
       <div className="obs-container" style={{ 
@@ -229,7 +210,7 @@ const LiveAlertsPage = () => {
                   className="text-lg font-bold" 
                   style={{ color: alertStyle.text_color }}
                 >
-                  {isTestDonation(lastAlert) ? "(Test) " : ""}
+                  {lastAlert.is_test ? "(Test) " : ""}
                   {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
                 </AlertTitle>
                 {lastAlert.message && (
@@ -337,14 +318,14 @@ const LiveAlertsPage = () => {
               className={cn(
                 "transition-all duration-500 p-6",
                 lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
-                isTestDonation(donation) ? "border-blue-300" : ""
+                donation.is_test ? "border-blue-300" : ""
               )}
             >
               <Bell className="h-6 w-6 mt-0.5" />
               <div className="w-full">
                 <div className="flex justify-between items-start">
                   <AlertTitle className="font-semibold text-lg">
-                    {isTestDonation(donation) && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
+                    {donation.is_test && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
                     {donation.donor_name} donated {formatIndianRupees(donation.amount)}
                   </AlertTitle>
                   <span className="text-sm text-muted-foreground">
