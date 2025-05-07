@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -30,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl, checkUserHasToken } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SetupPage = () => {
@@ -43,14 +44,20 @@ const SetupPage = () => {
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
   const [obsUrl, setObsUrl] = useState<string>("");
   const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
+  const [hasExistingToken, setHasExistingToken] = useState(false);
   
-  // Fetch the OBS URL on component mount
+  // Fetch the OBS URL on component mount and check for existing token
   useEffect(() => {
-    const fetchObsUrl = async () => {
+    const checkTokenAndGetUrl = async () => {
       if (!user) return;
       
       setIsGeneratingUrl(true);
       try {
+        // First check if user has an existing token
+        const { hasToken } = await checkUserHasToken();
+        setHasExistingToken(hasToken);
+        
+        // Get or generate the OBS URL
         const url = await getOBSUrl();
         if (url) {
           setObsUrl(url);
@@ -65,7 +72,7 @@ const SetupPage = () => {
     };
     
     if (user) {
-      fetchObsUrl();
+      checkTokenAndGetUrl();
     }
   }, [user]);
 
@@ -144,6 +151,7 @@ const SetupPage = () => {
       const url = await getOBSUrl(forceRegenerateToken);
       if (url) {
         setObsUrl(url);
+        setHasExistingToken(true);
         toast({
           title: forceRegenerateToken ? "URL Regenerated" : "URL Generated",
           description: forceRegenerateToken 
@@ -299,8 +307,8 @@ const SetupPage = () => {
                         size="icon"
                         className="ml-1"
                         onClick={() => generateObsUrl(false)}
-                        disabled={isGeneratingUrl}
-                        title="Generate Secure URL"
+                        disabled={isGeneratingUrl || hasExistingToken}
+                        title={hasExistingToken ? "You already have a token" : "Generate Secure URL"}
                       >
                         {isGeneratingUrl ? (
                           <RefreshCw className="h-4 w-4 animate-spin" />

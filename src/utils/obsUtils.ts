@@ -74,6 +74,13 @@ export const getOrCreateOBSToken = async () => {
     
     if (existingToken?.token) {
       console.log("Found existing OBS token");
+      
+      // Update last_used_at timestamp to prevent premature expiration
+      await supabase
+        .from('obs_tokens')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('token', existingToken.token);
+        
       return { token: existingToken.token };
     }
     
@@ -177,7 +184,6 @@ export const regenerateOBSToken = async () => {
     const newToken = uuidv4();
     
     // First delete any existing tokens for this user
-    // FIX: Use .eq() to properly filter by user_id
     const { error: deleteError } = await supabase
       .from('obs_tokens')
       .delete()
@@ -219,6 +225,7 @@ export const getOBSUrl = async (forceRegenerateToken = false) => {
     
     if (forceRegenerateToken) {
       // Force regenerate a new token (will invalidate previous ones)
+      console.log("Forcing token regeneration");
       tokenResult = await regenerateOBSToken();
     } else {
       // Get or create an OBS token for the current user
@@ -236,9 +243,49 @@ export const getOBSUrl = async (forceRegenerateToken = false) => {
     // Add a unique ID to prevent caching issues
     const uniqueId = uuidv4().substring(0, 8);
     const timestamp = new Date().getTime();
-    return `${window.location.origin}/live-alerts?obs=true&token=${token}&t=${timestamp}&uid=${uniqueId}`;
+    const baseUrl = typeof window !== 'undefined' ? 
+      window.location.origin : 
+      'https://your-app-url.com'; // Fallback for SSR contexts
+    
+    console.log("Generated OBS URL with token, timestamp, and uniqueId");
+    return `${baseUrl}/live-alerts?obs=true&token=${token}&t=${timestamp}&uid=${uniqueId}`;
   } catch (error) {
     console.error("Error generating OBS URL:", error);
     return null;
+  }
+};
+
+/**
+ * Checks if an OBS token exists for the current user
+ */
+export const checkUserHasToken = async () => {
+  try {
+    // Get the current user's ID
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error("No authenticated user found");
+      return { hasToken: false, error: "User not authenticated" };
+    }
+
+    // Check if the user already has a token
+    const { data: existingToken, error: fetchError } = await supabase
+      .from('obs_tokens')
+      .select('token')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error("Error checking for existing token:", fetchError);
+      return { hasToken: false, error: fetchError };
+    }
+    
+    return { 
+      hasToken: !!existingToken?.token,
+      token: existingToken?.token 
+    };
+  } catch (err) {
+    console.error("Exception in checkUserHasToken:", err);
+    return { hasToken: false, error: err };
   }
 };
