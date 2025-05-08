@@ -1,4 +1,3 @@
-
 // WebSocket server for donation alerts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -27,7 +26,10 @@ function broadcastToChannel(channelId: string, data: any) {
   let successCount = 0;
   let failCount = 0;
   
-  channelConnections.forEach(socket => {
+  // Create a copy of the connections to avoid issues if they change during iteration
+  const connectionsCopy = Array.from(channelConnections);
+  
+  connectionsCopy.forEach(socket => {
     try {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(message);
@@ -35,14 +37,21 @@ function broadcastToChannel(channelId: string, data: any) {
       } else {
         console.log(`Skipping socket with readyState: ${socket.readyState}`);
         failCount++;
+        // Remove dead connections
+        if (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+          channelConnections.delete(socket);
+        }
       }
     } catch (err) {
       console.error("Error sending to socket:", err);
       failCount++;
+      // Remove problematic connections
+      channelConnections.delete(socket);
     }
   });
   
   console.log(`Broadcast complete: ${successCount} successful, ${failCount} failed`);
+  return successCount;
 }
 
 // Helper to validate a user ID is legitimate
@@ -135,15 +144,35 @@ serve(async (req) => {
   console.log(`Client connected to channel ${channelId}, mode: ${mode}`);
   console.log(`Channel now has ${channelConnections.size} connections`);
   
-  // Send welcome message
+  // Send welcome message - with try/catch to handle errors
   try {
-    socket.send(JSON.stringify({
-      type: "welcome",
-      message: `Connected to channel ${channelId}`
-    }));
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: "welcome",
+        message: `Connected to channel ${channelId}`,
+        timestamp: new Date().toISOString()
+      }));
+    }
   } catch (error) {
     console.error("Error sending welcome message:", error);
   }
+
+  // Set up a ping interval to keep the connection alive
+  const pingInterval = setInterval(() => {
+    try {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: "keepalive",
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        clearInterval(pingInterval);
+      }
+    } catch (err) {
+      console.error("Error during keepalive ping:", err);
+      clearInterval(pingInterval);
+    }
+  }, 45000); // Every 45 seconds
 
   // Handle messages from clients
   socket.onmessage = async (event) => {
@@ -154,28 +183,50 @@ serve(async (req) => {
       // Handle different message types
       if (data.type === "donation") {
         console.log(`Broadcasting donation in channel ${channelId}`);
+        // Send immediately to this client and broadcast to others
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(data));
+        }
         broadcastToChannel(channelId, data);
       } else if (data.type === "ping") {
         console.log(`Ping received from channel ${channelId}`);
-        socket.send(JSON.stringify({
-          type: "pong",
-          timestamp: new Date().toISOString()
-        }));
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "pong",
+            timestamp: new Date().toISOString()
+          }));
+        }
       } else if (data.type === "hello") {
         console.log(`Hello from ${mode} in channel ${channelId}`);
-        socket.send(JSON.stringify({
-          type: "welcome",
-          message: `Connected to channel ${channelId}`
-        }));
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "welcome",
+            message: `Connected to channel ${channelId}`,
+            timestamp: new Date().toISOString()
+          }));
+        }
       }
     } catch (error) {
       console.error("Error processing message:", error);
+      // Try to send error back to client
+      try {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "error",
+            message: "Failed to process message",
+            timestamp: new Date().toISOString()
+          }));
+        }
+      } catch (err) {
+        console.error("Error sending error message:", err);
+      }
     }
   };
 
   // Handle client disconnection
   socket.onclose = () => {
     console.log(`Client disconnected from channel ${channelId}`);
+    clearInterval(pingInterval);
     
     // Remove this connection from tracking
     channelConnections.delete(socket);
@@ -192,6 +243,7 @@ serve(async (req) => {
   // Handle errors
   socket.onerror = (error) => {
     console.error(`WebSocket error in channel ${channelId}:`, error);
+    clearInterval(pingInterval);
   };
 
   return response;

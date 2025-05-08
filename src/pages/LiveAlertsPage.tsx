@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -70,6 +69,7 @@ const LiveAlertsPage = () => {
         // Clear any pending reconnect timeouts
         if (wsReconnectTimeoutRef.current !== null) {
           window.clearTimeout(wsReconnectTimeoutRef.current);
+          wsReconnectTimeoutRef.current = null;
         }
         
         const targetChannel = isOBSMode && channelId ? channelId : user?.id;
@@ -109,6 +109,15 @@ const LiveAlertsPage = () => {
               console.log("Welcome message received:", data.message);
             } else if (data.type === "pong") {
               console.log("Pong received:", data);
+            } else if (data.type === "keepalive") {
+              console.log("Keepalive received:", data.timestamp);
+              // Send pong in response
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                  type: "pong",
+                  timestamp: new Date().toISOString()
+                }));
+              }
             }
           } catch (error) {
             console.error("Error parsing WebSocket message:", error);
@@ -129,7 +138,7 @@ const LiveAlertsPage = () => {
             wsReconnectTimeoutRef.current = window.setTimeout(() => {
               console.log("Attempting to reconnect...");
               setupWebSocket();
-            }, 5000);
+            }, 3000);
           }
         };
         
@@ -154,7 +163,7 @@ const LiveAlertsPage = () => {
         wsReconnectTimeoutRef.current = window.setTimeout(() => {
           console.log("Attempting to reconnect after error...");
           setupWebSocket();
-        }, 5000);
+        }, 3000);
       }
     }
     
@@ -171,6 +180,7 @@ const LiveAlertsPage = () => {
       // Clear any pending reconnect timeouts
       if (wsReconnectTimeoutRef.current !== null) {
         window.clearTimeout(wsReconnectTimeoutRef.current);
+        wsReconnectTimeoutRef.current = null;
       }
     };
   }, [isOBSMode, channelId, user?.id]);
@@ -179,8 +189,28 @@ const LiveAlertsPage = () => {
   const handleNewDonation = (newDonation: Donation) => {
     console.log("Handling new donation:", newDonation);
     
-    // Add to alerts list
-    setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
+    // Generate a unique key if not available
+    if (!newDonation.id) {
+      console.log("Donation missing ID, generating one");
+      // @ts-ignore - adding clientId for uniqueness
+      newDonation.clientId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    }
+    
+    // Add to alerts list, ensuring no duplicates
+    setAlerts(prevAlerts => {
+      // Check if this donation already exists
+      const exists = prevAlerts.some(d => 
+        (d.id && d.id === newDonation.id) || 
+        (d.payment_id && d.payment_id === newDonation.payment_id)
+      );
+      
+      if (exists) {
+        console.log("Donation already exists in list, not adding duplicate");
+        return prevAlerts;
+      }
+      
+      return [newDonation, ...prevAlerts].slice(0, 20);
+    });
     
     // Set as last alert to highlight it
     setLastAlert(newDonation);
@@ -188,7 +218,7 @@ const LiveAlertsPage = () => {
     // Show toast notification if not in OBS mode
     if (!isOBSMode) {
       const isTest = isTestDonation(newDonation.payment_id) ? " (Test)" : "";
-      toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
+      toast(`${newDonation.donor_name}${isTest} donated ${formatIndianRupees(newDonation.amount)}`, {
         description: newDonation.message || "No message",
       });
     }
@@ -230,6 +260,10 @@ const LiveAlertsPage = () => {
             }));
           } else {
             console.warn("WebSocket not ready, can't broadcast donation");
+            // Attempt to reconnect the WebSocket
+            if (!wsRef.current || wsRef.current.readyState !== WebSocket.CONNECTING) {
+              handleReconnect();
+            }
           }
           
           // Also handle locally
@@ -319,6 +353,13 @@ const LiveAlertsPage = () => {
     if (wsRef.current) {
       console.log("Manually closing WebSocket for reconnection");
       wsRef.current.close();
+      wsRef.current = null;
+    }
+    
+    // Clear any pending reconnect timeouts
+    if (wsReconnectTimeoutRef.current !== null) {
+      window.clearTimeout(wsReconnectTimeoutRef.current);
+      wsReconnectTimeoutRef.current = null;
     }
     
     // Wait a moment before attempting to reconnect
@@ -331,6 +372,12 @@ const LiveAlertsPage = () => {
             wsRef.current = socket;
             setConnected(true);
             toast.success("Reconnected to alert system");
+            
+            // Send a test ping
+            socket.send(JSON.stringify({
+              type: "ping",
+              timestamp: new Date().toISOString()
+            }));
           })
           .catch(err => {
             console.error("Error during manual reconnection:", err);
@@ -413,7 +460,7 @@ const LiveAlertsPage = () => {
         
         {lastAlert && (
           <div 
-            key={lastAlert.id || Math.random()}
+            key={lastAlert.id || lastAlert.clientId || Math.random()}
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
             style={{
               fontFamily: alertStyle.font_family || "inherit"
@@ -590,7 +637,7 @@ const LiveAlertsPage = () => {
         {alerts.length > 0 ? (
           alerts.map((donation) => (
             <Alert 
-              key={donation.id || donation.payment_id}
+              key={donation.id || donation.payment_id || donation.clientId || Math.random()}
               className={cn(
                 "transition-all duration-500 p-6",
                 lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",

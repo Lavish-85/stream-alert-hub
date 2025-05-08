@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
@@ -66,7 +65,7 @@ export const sendTestAlert = async () => {
         toast.error("Failed to connect to WebSocket server");
       };
     } catch (wsErr) {
-      console.error("Failed to send test via WebSocket:", wsErr);
+      console.error("Failed to send via WebSocket:", wsErr);
       toast.error("Failed to initialize WebSocket connection");
     }
 
@@ -173,6 +172,21 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
           mode: mode
         }));
         
+        // Start periodic ping to keep connection alive
+        const pingInterval = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+              type: "ping",
+              timestamp: new Date().toISOString()
+            }));
+          } else {
+            clearInterval(pingInterval);
+          }
+        }, 30000); // Send ping every 30 seconds
+        
+        // Add pingInterval to the socket object so it can be cleared on close
+        socket.pingInterval = pingInterval;
+        
         resolve(socket);
       };
       
@@ -184,6 +198,10 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
       
       socket.onclose = (event) => {
         clearTimeout(connectionTimeout);
+        // Clear ping interval if it exists
+        if (socket.pingInterval) {
+          clearInterval(socket.pingInterval);
+        }
         console.log("WebSocket closed:", event.code, event.reason);
         if (!event.wasClean) {
           reject(new Error(`Connection closed unexpectedly: ${event.code}`));
