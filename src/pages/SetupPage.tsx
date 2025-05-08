@@ -1,517 +1,201 @@
 import React, { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  ArrowRight,
-  CheckCircle2,
-  Copy,
-  FileUp,
-  QrCode,
-  RefreshCw,
-  XCircle,
-  AlertTriangle,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl, checkUserHasToken, getWebSocketUrl } from "@/utils/obsUtils";
-import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { getOBSUrl, testRealtimeConnection } from "@/utils/obsUtils";
+import { Check, Copy, RefreshCw, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SetupPage = () => {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [upiId, setUpiId] = useState("");
-  const [upiIdError, setUpiIdError] = useState("");
+  const [obsURL, setObsURL] = useState<string | null>(null);
+  const [isTokenValid, setIsTokenValid] = useState<boolean | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
-  const [obsUrl, setObsUrl] = useState<string>("");
-  const [wsConnectionStatus, setWsConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
-  const [wsRef, setWsRef] = useState<WebSocket | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Generate OBS URL when user is available
-    if (user) {
-      const url = `${window.location.origin}/live-alerts?obs=true&channel=${user.id}`;
-      setObsUrl(url);
-      
-      // Test WebSocket connection
-      testWebSocketConnection(user.id);
-    }
-    
-    return () => {
-      // Close WebSocket connection when component unmounts
-      if (wsRef) {
-        wsRef.close();
-      }
+    const generateAndCheckToken = async () => {
+      if (!user?.id) return;
+
+      // Generate OBS URL
+      const url = await getOBSUrl();
+      setObsURL(url);
+
+      // Check if user has a valid token
+      const { hasToken } = await supabase.auth.getUser()
+        .then(() => ({ hasToken: true }))
+        .catch(() => ({ hasToken: false }));
+      setIsTokenValid(hasToken);
     };
-  }, [user]);
-  
-  // Test WebSocket connection to verify edge function is working
-  const testWebSocketConnection = (channelId: string) => {
-    try {
-      setWsConnectionStatus("connecting");
-      
-      // Close existing connection if any
-      if (wsRef) {
-        wsRef.close();
-      }
-      
-      // Create WebSocket connection using the helper
-      const wsUrl = getWebSocketUrl(channelId);
-      console.log("Testing WebSocket connection:", wsUrl);
-      
-      const socket = new WebSocket(wsUrl);
-      setWsRef(socket);
-      
-      socket.onopen = async () => {
-        console.log("WebSocket connected");
-        setWsConnectionStatus("connected");
-        
-        // Send hello message to test connection
-        socket.send(JSON.stringify({ 
-          type: "hello", 
-          channel: channelId,
-          mode: "consumer"
-        }));
-        
-        // Keep connection active for testing but close after a while
-        setTimeout(() => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.close();
-          }
-        }, 10000); // Keep open longer for testing
-      };
-      
-      socket.onmessage = (event) => {
-        console.log("WebSocket test message received:", event.data);
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "welcome") {
-            toast({
-              title: "WebSocket Connected",
-              description: "Successfully connected to the alert system.",
-            });
-          }
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
-        }
-      };
-      
-      socket.onclose = () => {
-        console.log("WebSocket test connection closed");
-        // Only change status if explicitly disconnected, not on normal close
-        if (wsConnectionStatus === "connecting") {
-          setWsConnectionStatus("disconnected");
-        }
-      };
-      
-      socket.onerror = (error) => {
-        console.error("WebSocket test connection error:", error);
-        setWsConnectionStatus("disconnected");
-        toast({
-          title: "Connection Error",
-          description: "Could not connect to WebSocket server. Please try again later.",
-          variant: "destructive",
-        });
-      };
-    } catch (error) {
-      console.error("Error testing WebSocket connection:", error);
-      setWsConnectionStatus("disconnected");
-      toast({
-        title: "Connection Error",
-        description: "Could not connect to WebSocket server. Please try again later.",
-        variant: "destructive",
-      });
-    }
-  };
 
-  const validateUpiId = () => {
-    const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
-    if (!upiId) {
-      setUpiIdError("UPI VPA is required");
-      return false;
-    }
-    if (!regex.test(upiId)) {
-      setUpiIdError("Invalid UPI VPA format (e.g. username@upi)");
-      return false;
-    }
-    setUpiIdError("");
-    return true;
-  };
+    generateAndCheckToken();
+  }, [user?.id]);
 
-  const handleNextStep = () => {
-    if (currentStep === 1) {
-      if (!validateUpiId()) return;
-      // Skip to step 3 (previously step 2 was KYC)
-      setCurrentStep(2);
-    } else {
-      setCurrentStep(currentStep + 1);
+  const handleTestConnection = async () => {
+    if (!user?.id) {
+      toast.error("Please sign in to test the connection.");
+      return;
     }
-  };
 
-  const handleCopy = async (text: string, message: string) => {
-    await navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied!",
-      description: message,
-    });
-  };
-
-  const testConnection = async () => {
     setIsTestingConnection(true);
-    setConnectionStatus("unknown");
-    
     try {
-      // Send a test alert through Supabase
-      const { error } = await sendTestAlert();
-      
-      if (error) {
-        console.error("Test alert error:", error);
-        setConnectionStatus("error");
-        toast({
-          title: "Connection failed",
-          description: "Could not send test alert. Please check your setup.",
-          variant: "destructive",
-        });
+      const isConnected = await testRealtimeConnection(user.id);
+      if (isConnected) {
+        toast.success("Realtime connection test successful!");
       } else {
-        setConnectionStatus("success");
-        toast({
-          title: "Connection successful!",
-          description: "Your OBS browser source is ready to receive alerts.",
-        });
+        toast.error("Realtime connection test failed. Check your internet connection and try again.");
       }
-    } catch (err) {
-      console.error("Test connection error:", err);
-      setConnectionStatus("error");
-      toast({
-        title: "Connection failed",
-        description: "Could not send test alert. Please check your setup.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error("Error testing realtime connection:", error);
+      toast.error(`Failed to test connection: ${error.message || "Unknown error"}`);
     } finally {
       setIsTestingConnection(false);
+    };
+  };
+
+  const handleCopyClick = async () => {
+    if (!obsURL) {
+      toast.error("OBS URL not available. Please try again.");
+      return;
+    }
+
+    setIsCopying(true);
+    try {
+      await navigator.clipboard.writeText(obsURL);
+      toast.success("OBS URL copied to clipboard!");
+    } catch (error) {
+      console.error("Failed to copy OBS URL:", error);
+      toast.error("Failed to copy OBS URL to clipboard.");
+    } finally {
+      setIsCopying(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2">Setup your donation page</h1>
-      <p className="text-muted-foreground mb-6">
-        Complete the following steps to start accepting donations on your streams
-      </p>
-      
-      <div className="mb-8">
-        <Progress value={(currentStep / 3) * 100} className="h-2" />
-        <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-          <span>UPI Setup</span>
-          <span>Generate Links</span>
-          <span>Test</span>
-        </div>
-      </div>
+    <div className="max-w-3xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Setup Instructions</h1>
 
-      <div className="space-y-8">
-        {/* Step 1: UPI Setup */}
-        {currentStep === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Enter your UPI VPA</CardTitle>
-              <CardDescription>
-                We'll use this to generate payment links and QR codes for your viewers
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="upi-id">UPI Virtual Payment Address</Label>
-                <Input
-                  id="upi-id"
-                  placeholder="yourname@upi"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  className={upiIdError ? "border-red-400" : ""}
-                />
-                {upiIdError && (
-                  <p className="text-sm font-medium text-red-500">{upiIdError}</p>
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>1. Configure OBS Browser Source</CardTitle>
+          <CardDescription>
+            Add a browser source to OBS Studio with the following settings:
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">OBS Browser Source URL:</p>
+            <div className="flex items-center">
+              <input
+                type="text"
+                readOnly
+                value={obsURL || "Loading..."}
+                className="flex-1 bg-gray-100 dark:bg-gray-800 text-sm border rounded-l-md px-3 py-2"
+              />
+              <Button
+                variant="outline"
+                className="rounded-r-md"
+                onClick={handleCopyClick}
+                disabled={!obsURL || isCopying}
+              >
+                {isCopying ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Copying...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy URL
+                  </>
                 )}
-                <p className="text-sm text-muted-foreground">
-                  Example: yourname@paytm, yourname@ybl, yourname@okicici
-                </p>
-              </div>
-              <Button onClick={handleNextStep} className="w-full sm:w-auto">
-                Continue <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Copy this URL and paste it into the URL field of your OBS browser source.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Recommended OBS Settings:</p>
+            <ul className="list-disc list-inside text-sm">
+              <li>Width: 1920</li>
+              <li>Height: 1080</li>
+              <li>
+                <strong className="font-semibold">Enable "Refresh browser when scene becomes active"</strong>
+              </li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>2. Test Realtime Connection</CardTitle>
+          <CardDescription>
+            Verify that your OBS browser source is receiving live updates.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleTestConnection}
+            disabled={isTestingConnection || !user?.id}
+            className="w-full"
+          >
+            {isTestingConnection ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing Connection...
+              </>
+            ) : (
+              "Test Realtime Connection"
+            )}
+          </Button>
+        </CardContent>
+        {isTokenValid !== null && (
+          <CardFooter className="justify-between">
+            <p className="text-sm">Realtime Status:</p>
+            {isTokenValid ? (
+              <Badge variant="outline">
+                <Check className="mr-2 h-4 w-4" />
+                Connected
+              </Badge>
+            ) : (
+              <Badge variant="destructive">
+                Disconnected
+              </Badge>
+            )}
+          </CardFooter>
         )}
+      </Card>
 
-        {/* Step 2: Generate Links */}
-        {currentStep === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>Integration Links</span>
-                {wsConnectionStatus === "connected" && (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 flex items-center gap-1 border-green-200">
-                    <Wifi className="h-3 w-3" /> WebSocket Connected
-                  </Badge>
-                )}
-                {wsConnectionStatus === "connecting" && (
-                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 flex items-center gap-1 border-yellow-200">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Connecting...
-                  </Badge>
-                )}
-                {wsConnectionStatus === "disconnected" && (
-                  <Badge variant="outline" className="bg-red-50 text-red-700 flex items-center gap-1 border-red-200">
-                    <WifiOff className="h-3 w-3" /> Disconnected
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription>
-                Use these to accept payments and display alerts on your stream
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <Tabs defaultValue="qr-code" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="qr-code">QR Code</TabsTrigger>
-                  <TabsTrigger value="obs-link">OBS Browser Source</TabsTrigger>
-                </TabsList>
-                <TabsContent value="qr-code" className="space-y-4 pt-4">
-                  <div className="mx-auto w-48 h-48 bg-white p-2 border">
-                    <div className="w-full h-full flex items-center justify-center bg-muted/20">
-                      <QrCode className="w-24 h-24 text-black" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="payment-link">Payment Link</Label>
-                    <div className="flex">
-                      <Input
-                        id="payment-link"
-                        value={`upi://pay?pa=${upiId}&pn=StreamDonate&cu=INR`}
-                        readOnly
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="ml-2"
-                        onClick={() => handleCopy(
-                          `upi://pay?pa=${upiId}&pn=StreamDonate&cu=INR`,
-                          "Payment link copied to clipboard"
-                        )}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Share this link or QR code with your viewers to accept donations
-                    </p>
-                  </div>
-                </TabsContent>
-                <TabsContent value="obs-link" className="space-y-4 pt-4">
-                  <Alert variant="default" className="bg-blue-50 border-blue-200">
-                    <Wifi className="h-5 w-5 text-blue-600" />
-                    <AlertTitle className="text-blue-800">New WebSocket Connection System</AlertTitle>
-                    <AlertDescription className="text-blue-700">
-                      We've upgraded to a more reliable WebSocket-based alert system. Copy and use the new URL below in your OBS browser source.
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="obs-url">OBS Browser Source URL:</Label>
-                    <div className="flex">
-                      <Input
-                        id="obs-url"
-                        value={obsUrl || "Loading..."}
-                        readOnly
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="ml-2"
-                        onClick={() => {
-                          if (obsUrl) {
-                            handleCopy(obsUrl, "OBS URL copied to clipboard");
-                          } else {
-                            toast({
-                              title: "Error",
-                              description: "URL not available yet. Please wait.",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        disabled={!obsUrl}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      This URL connects to our WebSocket server for reliable real-time alerts
-                    </p>
-                  </div>
-
-                  {/* Instructions */}
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <div className="flex items-center space-x-2">
-                      <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                      <h3 className="font-medium text-yellow-800">Important: OBS Settings</h3>
-                    </div>
-                    <ul className="text-sm text-yellow-700 mt-2 space-y-1 ml-6 list-disc">
-                      <li><strong>Always enable "Refresh browser when scene becomes active"</strong> in OBS browser source settings</li>
-                      <li>Set width to 1280 and height to 720</li>
-                      <li>Clear browser cache if you experience connection issues</li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-muted p-4 rounded-lg">
-                    <h4 className="font-semibold">How to add to OBS:</h4>
-                    <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
-                      <li>In OBS, add a new "Browser Source"</li>
-                      <li>Copy and paste the URL above into the URL field</li>
-                      <li>Set width to 1280 and height to 720</li>
-                      <li><strong className="text-primary">Check "Refresh browser when scene becomes active"</strong></li>
-                      <li>Click OK to save</li>
-                    </ol>
-                  </div>
-                  
-                  {wsConnectionStatus !== "connected" && (
-                    <Button 
-                      onClick={() => user && testWebSocketConnection(user.id)}
-                      variant="outline"
-                      className="w-full"
-                      disabled={!user || wsConnectionStatus === "connecting"}
-                    >
-                      {wsConnectionStatus === "connecting" ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Test WebSocket Connection
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </TabsContent>
-              </Tabs>
-              <Button onClick={handleNextStep}>
-                Continue to Connection Test
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Connection Test */}
-        {currentStep === 3 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Connection Test</CardTitle>
-              <CardDescription>
-                Verify your OBS browser source is working correctly
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="border rounded-lg p-6 flex flex-col items-center">
-                <div className="mb-4">
-                  {connectionStatus === "unknown" ? (
-                    <div className="w-16 h-16 rounded-full border-4 border-muted flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-muted-foreground/10"></div>
-                    </div>
-                  ) : connectionStatus === "success" ? (
-                    <CheckCircle2 className="w-16 h-16 text-green-500" />
-                  ) : (
-                    <XCircle className="w-16 h-16 text-red-500" />
-                  )}
-                </div>
-                <h3 className="text-lg font-medium mb-2">
-                  {connectionStatus === "unknown"
-                    ? "Test your connection"
-                    : connectionStatus === "success"
-                    ? "Connection successful!"
-                    : "Connection failed"}
-                </h3>
-                <p className="text-sm text-center text-muted-foreground mb-4">
-                  {connectionStatus === "unknown"
-                    ? "This will send a test alert to your OBS browser source"
-                    : connectionStatus === "success"
-                    ? "Your OBS browser source is correctly configured"
-                    : "Unable to connect to your OBS browser source"}
-                </p>
-                <Button
-                  onClick={testConnection}
-                  disabled={isTestingConnection}
-                  variant={connectionStatus === "success" ? "outline" : "default"}
-                  className={cn(
-                    connectionStatus === "success" && "border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
-                  )}
-                >
-                  {isTestingConnection ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Testing...
-                    </>
-                  ) : connectionStatus === "success" ? (
-                    "Send Another Test Alert"
-                  ) : connectionStatus === "error" ? (
-                    "Try Again"
-                  ) : (
-                    "Test Connection"
-                  )}
-                </Button>
-              </div>
-
-              <div className="bg-muted p-4 rounded-lg">
-                <h4 className="font-semibold">Next Steps:</h4>
-                <ul className="space-y-2 mt-2 list-disc list-inside text-sm">
-                  <li>Share your UPI link or QR code with viewers</li>
-                  <li>Customize your alert appearance in the "Alerts" tab</li>
-                  <li>Track donations in the "Analytics" tab</li>
-                </ul>
-              </div>
-
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-                <div className="flex items-start space-x-2">
-                  <RefreshCw className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-blue-800">Troubleshooting</h3>
-                    <p className="text-sm text-blue-600 mb-2">
-                      If you're experiencing issues with your OBS alerts, try these steps:
-                    </p>
-                    <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-                      <li>Make sure the WebSocket connection is established (check for "WebSocket Connected" badge)</li>
-                      <li>In OBS, right-click your browser source and select "Refresh cache of current page"</li>
-                      <li>Make sure "Refresh browser when scene becomes active" is checked</li>
-                      <li>Try completely removing and re-adding the browser source in OBS</li>
-                      <li>Verify that your internet connection is stable</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Troubleshooting</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <AlertTitle>No Alerts Showing?</AlertTitle>
+            <AlertDescription>
+              If you are not seeing alerts in your OBS browser source, try the following:
+              <ul className="list-disc list-inside space-y-1 mt-2">
+                <li>Make sure the OBS browser source URL is correct.</li>
+                <li>
+                  In OBS, right-click your browser source and select "Refresh cache of current page".
+                </li>
+                <li>
+                  Ensure that the "Refresh browser when scene becomes active" option is enabled in your
+                  OBS browser source properties.
+                </li>
+                <li>Check your internet connection.</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
     </div>
   );
 };
