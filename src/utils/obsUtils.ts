@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
@@ -6,6 +5,8 @@ import { toast } from "sonner";
 // Extend the WebSocket interface to include our custom properties
 interface ExtendedWebSocket extends WebSocket {
   pingInterval?: number | NodeJS.Timeout;
+  reconnectAttempts?: number;
+  lastPingTime?: number;
 }
 
 /**
@@ -57,7 +58,8 @@ export const sendTestAlert = async () => {
         // Send test donation as a message
         tempWs.send(JSON.stringify({
           type: "donation",
-          donation: data
+          donation: data,
+          idempotencyKey: uuidv4() // Add idempotency key for duplicate detection
         }));
         
         toast.success("Test alert sent via WebSocket");
@@ -151,7 +153,7 @@ export const checkUserHasToken = async () => {
 };
 
 /**
- * Creates a WebSocket connection for alerts
+ * Creates a WebSocket connection for alerts with improved reliability
  * Returns a promise that resolves when the connection is established
  */
 export const createAlertWebSocket = (channelId: string, mode = "consumer"): Promise<ExtendedWebSocket> => {
@@ -161,6 +163,10 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
       console.log(`Creating WebSocket connection to ${wsUrl} (${mode} mode)`);
       
       const socket = new WebSocket(wsUrl) as ExtendedWebSocket;
+      socket.reconnectAttempts = 0;
+      socket.lastPingTime = Date.now();
+      
+      // Set connection timeout - fail fast if cannot connect
       let connectionTimeout = setTimeout(() => {
         console.error("WebSocket connection timeout");
         socket.close();
@@ -170,17 +176,30 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
       socket.onopen = () => {
         clearTimeout(connectionTimeout);
         console.log("WebSocket connected successfully");
+        socket.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+        socket.lastPingTime = Date.now();
         
         // In OBS mode, send a "hello" message to the server
         socket.send(JSON.stringify({ 
           type: "hello", 
           channel: channelId,
-          mode: mode
+          mode: mode,
+          clientId: uuidv4() // Add client ID for better tracking
         }));
         
         // Start periodic ping to keep connection alive
+        // and detect zombie connections early
         const pingIntervalValue = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
+            // Check if we haven't received a response in too long
+            const now = Date.now();
+            if (socket.lastPingTime && now - socket.lastPingTime > 90000) {
+              console.warn("No ping response in 90 seconds, reconnecting...");
+              socket.close(3000, "Ping timeout");
+              clearInterval(pingIntervalValue);
+              return;
+            }
+            
             socket.send(JSON.stringify({
               type: "ping",
               timestamp: new Date().toISOString()
@@ -194,6 +213,22 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
         socket.pingInterval = pingIntervalValue;
         
         resolve(socket);
+      };
+      
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Update lastPingTime when we get any message from server
+          socket.lastPingTime = Date.now();
+          
+          // Specific handling for pong messages
+          if (data.type === "pong") {
+            console.log("Received pong from server:", data.timestamp);
+          }
+        } catch (err) {
+          console.error("Error parsing WebSocket message:", err);
+        }
       };
       
       socket.onerror = (err) => {

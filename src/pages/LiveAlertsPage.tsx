@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ const LiveAlertsPage = () => {
   // WebSocket references
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimeoutRef = useRef<number | null>(null);
+  const seenAlerts = useRef<Set<string>>(new Set()); // Track seen alerts by unique ID
   
   // Get parameters from URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -56,9 +57,25 @@ const LiveAlertsPage = () => {
     return payment_id?.startsWith('test_') || false;
   };
 
-  // WebSocket setup for OBS alerts
+  // Generate a unique identifier for a donation to prevent duplicates
+  const getDonationUniqueId = useCallback((donation: Donation): string => {
+    // Use existing IDs if available or generate a composite key
+    return donation.id ? 
+      `id-${donation.id}` : 
+      donation.payment_id ? 
+        `payment-${donation.payment_id}` : 
+        donation.clientId ? 
+          `client-${donation.clientId}` : 
+          `temp-${donation.donor_name}-${donation.amount}-${donation.created_at || new Date().toISOString()}`;
+  }, []);
+
+  // WebSocket setup for OBS alerts with improved reconnection logic
   useEffect(() => {
+    let isMounted = true; // Track component mount state to prevent state updates after unmount
+    
     async function setupWebSocket() {
+      if (!isMounted) return;
+      
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         console.log("WebSocket already connected");
         return;
@@ -108,14 +125,16 @@ const LiveAlertsPage = () => {
         }
         
         wsRef.current = socket;
-        setConnected(true);
-        setIsConnecting(false);
-        
-        if (!isOBSMode) {
-          toast.success("Connected to alert system");
+        if (isMounted) {
+          setConnected(true);
+          setIsConnecting(false);
+          
+          if (!isOBSMode) {
+            toast.success("Connected to alert system");
+          }
         }
         
-        // Handle messages from the server with improved error handling
+        // Handle messages from the server with improved error handling and duplicate detection
         socket.onmessage = (event) => {
           try {
             console.log("WebSocket message received:", event.data);
@@ -163,43 +182,53 @@ const LiveAlertsPage = () => {
         // Handle connection closure with faster reconnection
         socket.onclose = (event) => {
           console.log("WebSocket disconnected:", event.code, event.reason);
-          setConnected(false);
+          if (isMounted) {
+            setConnected(false);
+          }
           
           if (!event.wasClean) {
-            if (!isOBSMode) {
+            if (!isOBSMode && isMounted) {
               toast.error("Disconnected from alert system. Reconnecting...");
             }
             
             // Attempt to reconnect after a shorter delay
-            wsReconnectTimeoutRef.current = window.setTimeout(() => {
-              console.log("Attempting to reconnect...");
-              setupWebSocket();
-            }, 2000); // Reduce to 2 seconds for faster reconnection
+            if (isMounted) {
+              wsReconnectTimeoutRef.current = window.setTimeout(() => {
+                console.log("Attempting to reconnect...");
+                setupWebSocket();
+              }, 2000); // Reduce to 2 seconds for faster reconnection
+            }
           }
         };
         
         // Handle errors
         socket.onerror = (error) => {
           console.error("WebSocket error:", error);
-          setConnected(false);
-          if (!isOBSMode) {
+          if (isMounted) {
+            setConnected(false);
+          }
+          if (!isOBSMode && isMounted) {
             toast.error("Connection error. Will attempt to reconnect.");
           }
         };
       } catch (error) {
         console.error("Error during WebSocket setup:", error);
-        setConnected(false);
-        setIsConnecting(false);
-        
-        if (!isOBSMode) {
-          toast.error("Failed to connect to alert system. Will retry...");
+        if (isMounted) {
+          setConnected(false);
+          setIsConnecting(false);
+          
+          if (!isOBSMode) {
+            toast.error("Failed to connect to alert system. Will retry...");
+          }
+          
+          // Attempt to reconnect after a delay
+          wsReconnectTimeoutRef.current = window.setTimeout(() => {
+            if (isMounted) {
+              console.log("Attempting to reconnect after error...");
+              setupWebSocket();
+            }
+          }, 3000);
         }
-        
-        // Attempt to reconnect after a delay
-        wsReconnectTimeoutRef.current = window.setTimeout(() => {
-          console.log("Attempting to reconnect after error...");
-          setupWebSocket();
-        }, 3000);
       }
     }
     
@@ -207,6 +236,8 @@ const LiveAlertsPage = () => {
     
     // Return cleanup function
     return () => {
+      isMounted = false; // Mark component as unmounted
+      
       // Clean up WebSocket connection on unmount
       if (wsRef.current) {
         console.log("Cleaning up WebSocket connection");
@@ -222,32 +253,33 @@ const LiveAlertsPage = () => {
   }, [isOBSMode, channelId, user?.id]);
 
   // Handle a new donation alert with improved deduplication
-  const handleNewDonation = (newDonation: Donation) => {
+  const handleNewDonation = useCallback((newDonation: Donation) => {
     console.log("Handling new donation:", newDonation);
     
+    // Generate a unique identifier for this donation
+    const donationId = getDonationUniqueId(newDonation);
+    
+    // Check if we've seen this donation before
+    if (seenAlerts.current.has(donationId)) {
+      console.log(`Donation ${donationId} already processed, ignoring duplicate`);
+      return;
+    }
+    
+    console.log(`New donation with ID ${donationId} being processed`);
+    
+    // Mark this donation as seen
+    seenAlerts.current.add(donationId);
+    
     // Generate a unique key if not available
-    if (!newDonation.id) {
+    if (!newDonation.id && !newDonation.clientId) {
       console.log("Donation missing ID, generating one");
-      // Now TypeScript knows clientId is a valid property
       newDonation.clientId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
     
     // Add to alerts list, ensuring no duplicates with more robust checks
     setAlerts(prevAlerts => {
-      // Check if this donation already exists using multiple criteria
-      const exists = prevAlerts.some(d => 
-        // Check by ID
-        (d.id && d.id === newDonation.id) || 
-        // Check by payment_id
-        (d.payment_id && d.payment_id === newDonation.payment_id) ||
-        // Check by client ID
-        (d.clientId && d.clientId === newDonation.clientId) ||
-        // Check by similar timestamps and same amount/donor
-        (d.created_at && newDonation.created_at && 
-         d.amount === newDonation.amount && 
-         d.donor_name === newDonation.donor_name &&
-         Math.abs(new Date(d.created_at).getTime() - new Date(newDonation.created_at).getTime()) < 5000)
-      );
+      // Double-check for duplicates just to be safe
+      const exists = prevAlerts.some(d => getDonationUniqueId(d) === donationId);
       
       if (exists) {
         console.log("Donation already exists in list, not adding duplicate");
@@ -271,9 +303,15 @@ const LiveAlertsPage = () => {
     // Reset last alert highlight after several seconds
     const duration = activeStyle?.duration || 5;
     setTimeout(() => {
-      setLastAlert(null);
+      setLastAlert(prev => {
+        // Only clear if it's still the same alert
+        if (prev && getDonationUniqueId(prev) === donationId) {
+          return null;
+        }
+        return prev;
+      });
     }, duration * 1000);
-  };
+  }, [activeStyle?.duration, getDonationUniqueId, isOBSMode]);
 
   // Set up real-time subscription when userId is available
   useEffect(() => {
@@ -296,12 +334,17 @@ const LiveAlertsPage = () => {
           const newDonation = payload.new as Donation;
           console.log('New donation received from database:', newDonation);
           
+          // Add the unique ID for tracking
+          const donationId = getDonationUniqueId(newDonation);
+          console.log(`Generated unique ID for database donation: ${donationId}`);
+          
           // Send to WebSocket for broadcasting to OBS clients
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             console.log("Broadcasting donation to WebSocket");
             wsRef.current.send(JSON.stringify({
               type: "donation",
-              donation: newDonation
+              donation: newDonation,
+              idempotencyKey: donationId // Add idempotency key for duplicate detection
             }));
           } else {
             console.warn("WebSocket not ready, can't broadcast donation");
@@ -337,7 +380,17 @@ const LiveAlertsPage = () => {
       
       if (data) {
         console.log("Fetched donations:", data.length);
+        
+        // Clear seen alerts to prevent issues with initial loading
+        seenAlerts.current.clear();
+        
+        // Process each donation
         setAlerts(data);
+        
+        // Add all to seen alerts to prevent duplicates
+        data.forEach(donation => {
+          seenAlerts.current.add(getDonationUniqueId(donation));
+        });
       }
     };
 
@@ -347,7 +400,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [user?.id, isOBSMode]);
+  }, [user?.id, isOBSMode, getDonationUniqueId, handleNewDonation]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -509,7 +562,7 @@ const LiveAlertsPage = () => {
         
         {lastAlert && (
           <div 
-            key={lastAlert.id || lastAlert.clientId || Math.random()}
+            key={getDonationUniqueId(lastAlert)}
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
             style={{
               fontFamily: alertStyle.font_family || "inherit"
@@ -686,10 +739,10 @@ const LiveAlertsPage = () => {
         {alerts.length > 0 ? (
           alerts.map((donation) => (
             <Alert 
-              key={donation.id || donation.payment_id || donation.clientId || Math.random()}
+              key={getDonationUniqueId(donation)}
               className={cn(
                 "transition-all duration-500 p-6",
-                lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
+                lastAlert && getDonationUniqueId(lastAlert) === getDonationUniqueId(donation) ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
                 isTestDonation(donation.payment_id) ? "border-blue-300" : ""
               )}
             >
