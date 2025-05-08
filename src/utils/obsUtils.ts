@@ -184,6 +184,7 @@ export const regenerateOBSToken = async () => {
     const newToken = uuidv4();
     
     // First delete any existing tokens for this user
+    // Note: We're explicitly using delete and insert instead of upsert to avoid potential issues
     const { error: deleteError } = await supabase
       .from('obs_tokens')
       .delete()
@@ -194,7 +195,7 @@ export const regenerateOBSToken = async () => {
       return { error: deleteError };
     }
     
-    // Create a new token
+    // Create a new token AFTER confirming deletion was successful
     const { error: insertError } = await supabase
       .from('obs_tokens')
       .insert({
@@ -209,6 +210,7 @@ export const regenerateOBSToken = async () => {
       return { error: insertError };
     }
     
+    console.log("Successfully regenerated OBS token");
     return { token: newToken };
   } catch (err) {
     console.error("Exception in regenerateOBSToken:", err);

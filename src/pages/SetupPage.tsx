@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -63,6 +62,17 @@ const SetupPage = () => {
           setObsUrl(url);
         } else {
           console.error("Failed to generate OBS URL");
+          // If URL generation failed, try a forced regeneration
+          if (hasToken) {
+            const newUrl = await getOBSUrl(true);
+            if (newUrl) {
+              setObsUrl(newUrl);
+              toast({
+                title: "Token Regenerated",
+                description: "Previous token may have been invalid. New URL has been generated.",
+              });
+            }
+          }
         }
       } catch (error) {
         console.error("Error generating OBS URL:", error);
@@ -227,7 +237,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 2: Generate Links (previously Step 3) */}
+        {/* Step 2: Generate Links */}
         {currentStep === 2 && (
           <Card>
             <CardHeader>
@@ -390,7 +400,7 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 3: Connection Test (previously Step 4) */}
+        {/* Step 3: Connection Test */}
         {currentStep === 3 && (
           <Card>
             <CardHeader>
