@@ -1,10 +1,11 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 
 // Extend the WebSocket interface to include our custom properties
 interface ExtendedWebSocket extends WebSocket {
-  pingInterval?: number;
+  pingInterval?: number | NodeJS.Timeout;
 }
 
 /**
