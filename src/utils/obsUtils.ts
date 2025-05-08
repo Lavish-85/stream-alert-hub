@@ -112,6 +112,7 @@ export const getOrCreateOBSToken = async () => {
 
 /**
  * Validates an OBS token and returns the associated user ID
+ * Improved to be more robust with detailed logging
  */
 export const validateOBSToken = async (token: string) => {
   try {
@@ -122,12 +123,18 @@ export const validateOBSToken = async (token: string) => {
     
     console.log("Validating OBS token:", token);
     
-    // Find the token in the database
+    // Find the token in the database with more detailed logging
     const { data: tokenData, error } = await supabase
       .from('obs_tokens')
       .select('user_id, created_at, last_used_at')
       .eq('token', token)
       .maybeSingle();
+    
+    // Log detailed information about the query result
+    console.log("Token validation query result:", { 
+      tokenData: tokenData ? "Found" : "Not found", 
+      error: error || "No error" 
+    });
     
     if (error) {
       console.error("Database error validating OBS token:", error);
@@ -136,6 +143,14 @@ export const validateOBSToken = async (token: string) => {
     
     if (!tokenData) {
       console.error("Token not found in database");
+      
+      // Additional logging to help debug
+      const { count, error: countError } = await supabase
+        .from('obs_tokens')
+        .select('*', { count: 'exact', head: true });
+      
+      console.log(`Total tokens in database: ${count || 'unknown'}, Query error: ${countError || 'None'}`);
+      
       return { error: "Token not found" };
     }
     
@@ -220,6 +235,7 @@ export const regenerateOBSToken = async () => {
 
 /**
  * Generates an OBS URL with the user's token and cache-busting parameters
+ * Enhanced with stronger cache-busting and forced regeneration capability
  */
 export const getOBSUrl = async (forceRegenerateToken = false) => {
   try {

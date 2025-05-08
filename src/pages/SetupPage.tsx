@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl, checkUserHasToken } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl, checkUserHasToken, regenerateOBSToken } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SetupPage = () => {
@@ -44,8 +44,10 @@ const SetupPage = () => {
   const [obsUrl, setObsUrl] = useState<string>("");
   const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
   const [hasExistingToken, setHasExistingToken] = useState(false);
+  const [tokenGenerationRetries, setTokenGenerationRetries] = useState(0);
+  const MAX_RETRIES = 2;
   
-  // Fetch the OBS URL on component mount and check for existing token
+  // Enhanced token check and OBS URL generation with retries
   useEffect(() => {
     const checkTokenAndGetUrl = async () => {
       if (!user) return;
@@ -57,25 +59,40 @@ const SetupPage = () => {
         setHasExistingToken(hasToken);
         
         // Get or generate the OBS URL
-        const url = await getOBSUrl();
+        let url = await getOBSUrl();
+        
+        // If URL generation failed but we have a token, try regenerating
+        if (!url && hasToken) {
+          console.log("Initial URL generation failed, trying forced regeneration");
+          url = await getOBSUrl(true);
+          
+          if (url) {
+            setTokenGenerationRetries(prev => prev + 1);
+            toast({
+              title: "Token Regenerated",
+              description: "Previous token may have been invalid. New URL has been generated.",
+            });
+          }
+        }
+        
+        // Set the URL if we have one
         if (url) {
           setObsUrl(url);
         } else {
-          console.error("Failed to generate OBS URL");
-          // If URL generation failed, try a forced regeneration
-          if (hasToken) {
-            const newUrl = await getOBSUrl(true);
-            if (newUrl) {
-              setObsUrl(newUrl);
-              toast({
-                title: "Token Regenerated",
-                description: "Previous token may have been invalid. New URL has been generated.",
-              });
-            }
-          }
+          console.error("Failed to generate OBS URL after retries");
+          toast({
+            title: "Token Generation Issue",
+            description: "Could not generate a valid token. Please try the 'Regenerate New Token' button.",
+            variant: "destructive"
+          });
         }
       } catch (error) {
         console.error("Error generating OBS URL:", error);
+        toast({
+          title: "Error",
+          description: "Could not connect to the server. Please try again.",
+          variant: "destructive"
+        });
       } finally {
         setIsGeneratingUrl(false);
       }
@@ -154,11 +171,21 @@ const SetupPage = () => {
     }
   };
 
-  // Function to generate/regenerate the OBS URL
+  // Function to generate/regenerate the OBS URL with enhanced reliability
   const generateObsUrl = async (forceRegenerateToken = false) => {
     setIsGeneratingUrl(true);
     try {
-      const url = await getOBSUrl(forceRegenerateToken);
+      let url = await getOBSUrl(forceRegenerateToken);
+      
+      // If URL generation failed and we haven't exceeded retry limit
+      if (!url && tokenGenerationRetries < MAX_RETRIES) {
+        console.log(`URL generation failed, retrying (attempt ${tokenGenerationRetries + 1})`);
+        
+        // Force token regeneration on retry
+        url = await getOBSUrl(true);
+        setTokenGenerationRetries(prev => prev + 1);
+      }
+      
       if (url) {
         setObsUrl(url);
         setHasExistingToken(true);
@@ -169,9 +196,10 @@ const SetupPage = () => {
             : "Secure OBS Browser Source URL has been created.",
         });
       } else {
+        // Suggest manual token regeneration if retries failed
         toast({
-          title: "Error",
-          description: "Could not generate URL. Please try again.",
+          title: "URL Generation Failed",
+          description: "Please try clicking the 'Regenerate New Token' button to create a fresh token.",
           variant: "destructive",
         });
       }
@@ -179,7 +207,50 @@ const SetupPage = () => {
       console.error("Error generating OBS URL:", error);
       toast({
         title: "Error",
-        description: "Could not generate URL. Please try again.",
+        description: "Could not generate URL. Server may be unavailable.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingUrl(false);
+    }
+  };
+
+  // Direct function for token regeneration with enhanced feedback
+  const handleForceTokenRegeneration = async () => {
+    setIsGeneratingUrl(true);
+    try {
+      // First directly regenerate the token
+      const { token, error } = await regenerateOBSToken();
+      
+      if (error || !token) {
+        console.error("Error during forced token regeneration:", error);
+        toast({
+          title: "Token Regeneration Failed",
+          description: "Could not create new token. Please try again or contact support.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Now get a URL with the new token
+      const uniqueId = Math.random().toString(36).substring(2, 10);
+      const timestamp = new Date().getTime();
+      const baseUrl = window.location.origin;
+      const url = `${baseUrl}/live-alerts?obs=true&token=${token}&t=${timestamp}&uid=${uniqueId}`;
+      
+      setObsUrl(url);
+      setHasExistingToken(true);
+      
+      toast({
+        title: "Token Successfully Regenerated",
+        description: "New OBS URL created. Update this in your OBS browser source and refresh the cache.",
+      });
+      
+    } catch (error) {
+      console.error("Exception during forced token regeneration:", error);
+      toast({
+        title: "Unexpected Error",
+        description: "Please try again or contact support if the issue persists.",
         variant: "destructive",
       });
     } finally {
@@ -332,6 +403,7 @@ const SetupPage = () => {
                     </p>
                   </div>
 
+                  {/* Enhanced troubleshooting information */}
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                     <div className="flex items-center space-x-2">
                       <AlertTriangle className="h-5 w-5 text-yellow-600" />
@@ -344,6 +416,7 @@ const SetupPage = () => {
                     </ul>
                   </div>
 
+                  {/* Enhanced token regeneration section */}
                   <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
                     <div className="flex items-start space-x-2">
                       <RefreshCw className="h-5 w-5 text-rose-600 mt-0.5" />
@@ -357,7 +430,7 @@ const SetupPage = () => {
                           variant="outline" 
                           size="sm" 
                           className="border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700"
-                          onClick={() => generateObsUrl(true)}
+                          onClick={handleForceTokenRegeneration}
                           disabled={isGeneratingUrl}
                         >
                           {isGeneratingUrl ? (

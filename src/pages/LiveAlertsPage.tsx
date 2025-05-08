@@ -44,7 +44,7 @@ const LiveAlertsPage = () => {
   // Otherwise, use the authenticated user's ID
   const effectiveUserId = isOBSMode && tokenUserId ? tokenUserId : user?.id;
 
-  // Validate token if in OBS mode
+  // Validate token if in OBS mode - updated with more robust error handling
   useEffect(() => {
     const validateToken = async () => {
       // Only validate if in OBS mode and we have a token
@@ -61,13 +61,23 @@ const LiveAlertsPage = () => {
         return;
       }
 
-      console.log("LiveAlertsPage: Validating OBS token");
+      console.log("LiveAlertsPage: Validating OBS token:", obsToken);
       const { userId, error } = await validateOBSToken(obsToken);
       
       if (error || !userId) {
         console.error("LiveAlertsPage: Token validation failed:", error);
         setAuthError(error?.toString() || "Token validation failed");
         setAuthStatus('error');
+        
+        // Additional logging to help debug the issue
+        console.log("LiveAlertsPage: Authentication failed with token:", obsToken);
+        
+        // Check if there are any tokens in the database for debugging
+        const { count, error: countError } = await supabase
+          .from('obs_tokens')
+          .select('*', { count: 'exact', head: true });
+        
+        console.log(`LiveAlertsPage: Total tokens in database: ${count || 'unknown'}, Error: ${countError || 'None'}`);
         return;
       }
       
@@ -214,15 +224,27 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // If in OBS mode and authentication failed, show an error
+  // If in OBS mode and authentication failed, show an improved error with more helpful information
   if (isOBSMode && authStatus === 'error') {
     return (
       <div className="flex items-center justify-center h-screen bg-background p-4">
         <Alert variant="destructive" className="max-w-md shadow-lg">
           <AlertTriangle className="h-6 w-6" />
           <AlertTitle>Authentication Failed</AlertTitle>
-          <AlertDescription>
-            {authError || "The OBS authentication token is invalid or expired. Please generate a new OBS link in the StreamDonate dashboard."}
+          <AlertDescription className="space-y-3">
+            <p>{authError || "The OBS authentication token is invalid or expired."}</p>
+            
+            <div className="mt-2 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
+              <h4 className="font-bold mb-1">Troubleshooting steps:</h4>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Return to the StreamDonate dashboard</li>
+                <li>Go to Setup page and click "Regenerate New Token"</li>
+                <li>Copy the new URL to your OBS browser source</li>
+                <li>In OBS, right-click your browser source and select "Refresh cache of current page"</li>
+                <li>Make sure "Refresh browser when scene becomes active" is enabled in OBS</li>
+              </ol>
+            </div>
+            
             <div className="mt-4">
               <a 
                 href="/" 
