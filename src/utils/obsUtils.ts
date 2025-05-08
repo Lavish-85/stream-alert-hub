@@ -1,13 +1,7 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
-
-// Extend the WebSocket interface to include our custom properties
-interface ExtendedWebSocket extends WebSocket {
-  pingInterval?: number | NodeJS.Timeout;
-  reconnectAttempts?: number;
-  lastPingTime?: number;
-}
 
 /**
  * Sends a test alert to the OBS browser source
@@ -45,38 +39,7 @@ export const sendTestAlert = async () => {
     }
 
     console.log("Test alert sent successfully:", data);
-    
-    // Also try to send via WebSocket directly for immediate feedback
-    try {
-      const wsUrl = getWebSocketUrl(user.id);
-      console.log("Sending test alert via WebSocket to:", wsUrl);
-      
-      // Create temporary WebSocket connection
-      const tempWs = new WebSocket(wsUrl);
-      
-      tempWs.onopen = () => {
-        // Send test donation as a message
-        tempWs.send(JSON.stringify({
-          type: "donation",
-          donation: data,
-          idempotencyKey: uuidv4() // Add idempotency key for duplicate detection
-        }));
-        
-        toast.success("Test alert sent via WebSocket");
-        
-        // Close after sending
-        setTimeout(() => tempWs.close(), 1000);
-      };
-      
-      tempWs.onerror = (err) => {
-        console.error("WebSocket error when sending test:", err);
-        toast.error("Failed to connect to WebSocket server");
-      };
-    } catch (wsErr) {
-      console.error("Failed to send via WebSocket:", wsErr);
-      toast.error("Failed to initialize WebSocket connection");
-    }
-
+    toast.success("Test alert sent");
     return { data };
   } catch (err) {
     console.error("Exception in sendTestAlert:", err);
@@ -85,14 +48,7 @@ export const sendTestAlert = async () => {
 };
 
 /**
- * Gets the WebSocket URL for the alerts system
- */
-export const getWebSocketUrl = (channelId: string): string => {
-  return `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channelId}&mode=consumer`;
-};
-
-/**
- * Generates an OBS URL with the user's channel ID
+ * Gets the OBS URL with the user's channel ID
  */
 export const getOBSUrl = async () => {
   try {
@@ -129,7 +85,7 @@ export const checkUserHasToken = async () => {
       return { hasToken: false, error: "User not authenticated" };
     }
 
-    // For WebSocket approach, we don't need tokens anymore
+    // For Supabase Realtime approach, we don't need tokens anymore
     // Just check if the user exists
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -153,134 +109,65 @@ export const checkUserHasToken = async () => {
 };
 
 /**
- * Creates a WebSocket connection for alerts with improved reliability
- * Returns a promise that resolves when the connection is established
- */
-export const createAlertWebSocket = (channelId: string, mode = "consumer"): Promise<ExtendedWebSocket> => {
-  return new Promise((resolve, reject) => {
-    try {
-      const wsUrl = getWebSocketUrl(channelId);
-      console.log(`Creating WebSocket connection to ${wsUrl} (${mode} mode)`);
-      
-      const socket = new WebSocket(wsUrl) as ExtendedWebSocket;
-      socket.reconnectAttempts = 0;
-      socket.lastPingTime = Date.now();
-      
-      // Set connection timeout - fail fast if cannot connect
-      let connectionTimeout = setTimeout(() => {
-        console.error("WebSocket connection timeout");
-        socket.close();
-        reject(new Error("Connection timeout"));
-      }, 10000);
-      
-      socket.onopen = () => {
-        clearTimeout(connectionTimeout);
-        console.log("WebSocket connected successfully");
-        socket.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-        socket.lastPingTime = Date.now();
-        
-        // In OBS mode, send a "hello" message to the server
-        socket.send(JSON.stringify({ 
-          type: "hello", 
-          channel: channelId,
-          mode: mode,
-          clientId: uuidv4() // Add client ID for better tracking
-        }));
-        
-        // Start periodic ping to keep connection alive
-        // and detect zombie connections early
-        const pingIntervalValue = setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) {
-            // Check if we haven't received a response in too long
-            const now = Date.now();
-            if (socket.lastPingTime && now - socket.lastPingTime > 90000) {
-              console.warn("No ping response in 90 seconds, reconnecting...");
-              socket.close(3000, "Ping timeout");
-              clearInterval(pingIntervalValue);
-              return;
-            }
-            
-            socket.send(JSON.stringify({
-              type: "ping",
-              timestamp: new Date().toISOString()
-            }));
-          } else {
-            clearInterval(pingIntervalValue);
-          }
-        }, 30000); // Send ping every 30 seconds
-        
-        // Add pingInterval to the socket object so it can be cleared on close
-        socket.pingInterval = pingIntervalValue;
-        
-        resolve(socket);
-      };
-      
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Update lastPingTime when we get any message from server
-          socket.lastPingTime = Date.now();
-          
-          // Specific handling for pong messages
-          if (data.type === "pong") {
-            console.log("Received pong from server:", data.timestamp);
-          }
-        } catch (err) {
-          console.error("Error parsing WebSocket message:", err);
-        }
-      };
-      
-      socket.onerror = (err) => {
-        clearTimeout(connectionTimeout);
-        console.error("WebSocket error:", err);
-        reject(err);
-      };
-      
-      socket.onclose = (event) => {
-        clearTimeout(connectionTimeout);
-        // Clear ping interval if it exists
-        if (socket.pingInterval) {
-          clearInterval(socket.pingInterval);
-        }
-        console.log("WebSocket closed:", event.code, event.reason);
-        if (!event.wasClean) {
-          reject(new Error(`Connection closed unexpectedly: ${event.code}`));
-        }
-      };
-      
-    } catch (error) {
-      console.error("Error setting up WebSocket:", error);
-      reject(error);
-    }
-  });
-};
-
-/**
- * Tests if the WebSocket connection works
+ * Tests if the realtime subscription works
  * Returns a promise that resolves to true if a connection can be established
  */
-export const testWebSocketConnection = async (channelId: string): Promise<boolean> => {
+export const testRealtimeConnection = async (channelId: string): Promise<boolean> => {
   try {
-    const socket = await createAlertWebSocket(channelId);
+    let testSuccessful = false;
+    let timeoutId: NodeJS.Timeout | null = null;
     
-    // Give the server a moment to process the hello message
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Send a test message
-    socket.send(JSON.stringify({
-      type: "ping",
-      timestamp: new Date().toISOString()
-    }));
-    
-    // Wait for a bit to ensure messages are processed
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Close the connection
-    socket.close();
-    return true;
+    return new Promise((resolve) => {
+      // Set up a timeout to resolve the promise after 5 seconds if no success
+      timeoutId = setTimeout(() => {
+        console.log("Realtime test timed out");
+        if (!testSuccessful) {
+          resolve(false);
+        }
+      }, 5000);
+
+      // Create a temporary channel to test if realtime is working
+      const channel = supabase
+        .channel(`test-${channelId}`)
+        .on('presence', { event: 'sync' }, () => {
+          console.log("Realtime presence sync successful");
+          testSuccessful = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          channel.unsubscribe();
+          resolve(true);
+        })
+        .on('presence', { event: 'join' }, () => {
+          console.log("Realtime presence join successful");
+          testSuccessful = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          channel.unsubscribe();
+          resolve(true);
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log("Realtime subscription successful");
+            await channel.track({ user: channelId, online_at: new Date().toISOString() });
+          }
+        });
+        
+      // Also test a Postgres change to be thorough
+      supabase
+        .channel(`test-postgres-${channelId}`)
+        .on('postgres_changes', { 
+          event: '*',
+          schema: 'public',
+          table: 'donations',
+          filter: `user_id=eq.${channelId}`
+        }, () => {
+          console.log("Postgres changes subscription successful");
+          testSuccessful = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve(true);
+        })
+        .subscribe();
+    });
   } catch (error) {
-    console.error("WebSocket test failed:", error);
+    console.error("Error testing realtime connection:", error);
     return false;
   }
 };

@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { sendTestAlert, getWebSocketUrl, createAlertWebSocket, testWebSocketConnection } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl, testRealtimeConnection } from "@/utils/obsUtils";
+import { v4 as uuidv4 } from "uuid";
 
 // Define the donation type based on our Supabase schema
 // Add clientId as an optional property to handle the temporary IDs
@@ -33,10 +34,12 @@ const LiveAlertsPage = () => {
   const { activeStyle, isLoading: styleLoading } = useAlertStyle();
   const { user } = useAuth();
   
-  // WebSocket references
-  const wsRef = useRef<WebSocket | null>(null);
-  const wsReconnectTimeoutRef = useRef<number | null>(null);
-  const seenAlerts = useRef<Set<string>>(new Set()); // Track seen alerts by unique ID
+  // Keep track of seen alerts to prevent duplicates
+  const seenAlerts = useRef<Set<string>>(new Set());
+  
+  // Subscription references
+  const channelRef = useRef<any>(null);
+  const presenceChannelRef = useRef<any>(null);
   
   // Get parameters from URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -69,185 +72,149 @@ const LiveAlertsPage = () => {
           `temp-${donation.donor_name}-${donation.amount}-${donation.created_at || new Date().toISOString()}`;
   }, []);
 
-  // WebSocket setup for OBS alerts with improved reconnection logic
+  // Set up Supabase Realtime for alerts with improved reliability
   useEffect(() => {
-    let isMounted = true; // Track component mount state to prevent state updates after unmount
+    let isMounted = true;
     
-    async function setupWebSocket() {
+    async function setupRealtime() {
       if (!isMounted) return;
-      
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        console.log("WebSocket already connected");
-        return;
-      }
       
       setIsConnecting(true);
       setConnected(false);
       
       try {
-        // Clear any pending reconnect timeouts
-        if (wsReconnectTimeoutRef.current !== null) {
-          window.clearTimeout(wsReconnectTimeoutRef.current);
-          wsReconnectTimeoutRef.current = null;
-        }
-        
+        // Get the target channel - either from URL param (OBS mode) or current user
         const targetChannel = isOBSMode && channelId ? channelId : user?.id;
         if (!targetChannel) {
-          console.log("No channel ID available, skipping WebSocket setup");
+          console.log("No channel ID available, skipping Realtime setup");
           setIsConnecting(false);
           return;
         }
         
-        console.log(`Setting up WebSocket for channel: ${targetChannel}, mode: ${isOBSMode ? "OBS" : "dashboard"}`);
+        console.log(`Setting up Realtime for channel: ${targetChannel}`);
         
-        // Create WebSocket connection with more aggressive retries
-        let retryCount = 0;
-        const maxRetries = 5;
-        let socket;
-        
-        while (retryCount < maxRetries) {
-          try {
-            socket = await createAlertWebSocket(
-              targetChannel,
-              isOBSMode ? "consumer" : "producer"
-            );
-            break; // If we get here, connection succeeded
-          } catch (err) {
-            retryCount++;
-            console.log(`WebSocket connection attempt ${retryCount} failed, retrying...`);
-            if (retryCount >= maxRetries) throw err;
-            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second between retries
-          }
+        // Clean up existing subscriptions
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
         }
         
-        if (!socket) {
-          throw new Error("Failed to establish WebSocket connection after multiple attempts");
+        if (presenceChannelRef.current) {
+          supabase.removeChannel(presenceChannelRef.current);
+          presenceChannelRef.current = null;
         }
         
-        wsRef.current = socket;
-        if (isMounted) {
-          setConnected(true);
-          setIsConnecting(false);
-          
-          if (!isOBSMode) {
-            toast.success("Connected to alert system");
-          }
-        }
-        
-        // Handle messages from the server with improved error handling and duplicate detection
-        socket.onmessage = (event) => {
-          try {
-            console.log("WebSocket message received:", event.data);
-            const data = JSON.parse(event.data);
-            
-            if (data.type === "donation") {
-              const newDonation = data.donation as Donation;
-              console.log("Processing donation from WebSocket:", newDonation);
-              
-              // Add more validation to prevent errors
-              if (!newDonation) {
-                console.error("Invalid donation data received:", data);
-                return;
-              }
-              
-              // Ensure we have minimum required fields
-              if (!newDonation.donor_name || !newDonation.amount) {
-                console.error("Donation missing required fields:", newDonation);
-                return;
-              }
-              
+        // Create a new channel for database changes
+        const channel = supabase
+          .channel(`alerts-${targetChannel}-${uuidv4().substring(0, 8)}`)
+          .on('postgres_changes', 
+            { 
+              event: 'INSERT', 
+              schema: 'public', 
+              table: 'donations',
+              filter: `user_id=eq.${targetChannel}`
+            }, 
+            (payload) => {
+              console.log('Donation received via Realtime:', payload);
+              const newDonation = payload.new as Donation;
               handleNewDonation(newDonation);
-            } else if (data.type === "welcome") {
-              console.log("Welcome message received:", data.message);
-            } else if (data.type === "pong") {
-              console.log("Pong received:", data);
-            } else if (data.type === "keepalive") {
-              console.log("Keepalive received:", data.timestamp);
-              // Send pong in response
-              if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                  type: "pong",
-                  timestamp: new Date().toISOString()
-                }));
-              }
-            } else if (data.type === "error") {
-              console.error("Error from WebSocket server:", data.message);
-              toast.error(`Server error: ${data.message}`);
             }
-          } catch (error) {
-            console.error("Error parsing WebSocket message:", error);
-          }
-        };
-        
-        // Handle connection closure with faster reconnection
-        socket.onclose = (event) => {
-          console.log("WebSocket disconnected:", event.code, event.reason);
-          if (isMounted) {
-            setConnected(false);
-          }
-          
-          if (!event.wasClean) {
-            if (!isOBSMode && isMounted) {
-              toast.error("Disconnected from alert system. Reconnecting...");
-            }
+          )
+          .subscribe(async (status) => {
+            console.log(`Realtime subscription status: ${status}`);
             
-            // Attempt to reconnect after a shorter delay
-            if (isMounted) {
-              wsReconnectTimeoutRef.current = window.setTimeout(() => {
-                console.log("Attempting to reconnect...");
-                setupWebSocket();
-              }, 2000); // Reduce to 2 seconds for faster reconnection
+            if (status === 'SUBSCRIBED') {
+              if (isMounted) {
+                setConnected(true);
+                setIsConnecting(false);
+                
+                if (!isOBSMode) {
+                  toast.success("Connected to alert system");
+                }
+              }
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error("Realtime subscription error");
+              if (isMounted) {
+                setConnected(false);
+                setIsConnecting(false);
+                
+                if (!isOBSMode) {
+                  toast.error("Failed to connect to alert system. Will retry...");
+                }
+                
+                // Retry after delay
+                setTimeout(() => {
+                  if (isMounted) setupRealtime();
+                }, 3000);
+              }
             }
-          }
-        };
+          });
+          
+        channelRef.current = channel;
         
-        // Handle errors
-        socket.onerror = (error) => {
-          console.error("WebSocket error:", error);
-          if (isMounted) {
-            setConnected(false);
-          }
-          if (!isOBSMode && isMounted) {
-            toast.error("Connection error. Will attempt to reconnect.");
-          }
-        };
+        // Also set up a presence channel for heartbeats and connection monitoring
+        const presenceChannel = supabase
+          .channel(`presence-${targetChannel}`)
+          .on('presence', { event: 'sync' }, () => {
+            const state = presenceChannel.presenceState();
+            console.log('Presence state synchronized:', state);
+            // This confirms our presence system is working
+          })
+          .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+            console.log('User joined:', key, newPresences);
+            // Another client connected - could show notification
+          })
+          .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+            console.log('User left:', key, leftPresences);
+            // Another client disconnected
+          })
+          .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+              // Broadcast our presence
+              await presenceChannel.track({ 
+                user_id: targetChannel,
+                client_id: uuidv4().substring(0, 8),
+                online_at: new Date().toISOString(),
+                mode: isOBSMode ? 'obs' : 'dashboard'
+              });
+            }
+          });
+          
+        presenceChannelRef.current = presenceChannel;
+        
       } catch (error) {
-        console.error("Error during WebSocket setup:", error);
+        console.error("Error during Realtime setup:", error);
         if (isMounted) {
           setConnected(false);
           setIsConnecting(false);
           
           if (!isOBSMode) {
-            toast.error("Failed to connect to alert system. Will retry...");
+            toast.error("Connection error. Will attempt to reconnect.");
           }
           
-          // Attempt to reconnect after a delay
-          wsReconnectTimeoutRef.current = window.setTimeout(() => {
-            if (isMounted) {
-              console.log("Attempting to reconnect after error...");
-              setupWebSocket();
-            }
+          // Retry after a delay
+          setTimeout(() => {
+            if (isMounted) setupRealtime();
           }, 3000);
         }
       }
     }
     
-    setupWebSocket();
+    setupRealtime();
     
     // Return cleanup function
     return () => {
-      isMounted = false; // Mark component as unmounted
+      isMounted = false;
       
-      // Clean up WebSocket connection on unmount
-      if (wsRef.current) {
-        console.log("Cleaning up WebSocket connection");
-        wsRef.current.close();
+      // Clean up Realtime subscriptions on unmount
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
       
-      // Clear any pending reconnect timeouts
-      if (wsReconnectTimeoutRef.current !== null) {
-        window.clearTimeout(wsReconnectTimeoutRef.current);
-        wsReconnectTimeoutRef.current = null;
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
       }
     };
   }, [isOBSMode, channelId, user?.id]);
@@ -313,59 +280,18 @@ const LiveAlertsPage = () => {
     }, duration * 1000);
   }, [activeStyle?.duration, getDonationUniqueId, isOBSMode]);
 
-  // Set up real-time subscription when userId is available
+  // Fetch initial alerts when user is available
   useEffect(() => {
-    // Only set up the subscription in producer mode (not OBS mode)
+    // Only fetch in non-OBS mode when user is available
     if (isOBSMode || !user?.id) return;
 
-    console.log("Setting up subscription for user:", user.id);
-
-    // Subscribe to real-time updates for donations for this specific user
-    const channel = supabase
-      .channel('public:donations')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'donations',
-          filter: `user_id=eq.${user.id}`
-        }, 
-        (payload) => {
-          const newDonation = payload.new as Donation;
-          console.log('New donation received from database:', newDonation);
-          
-          // Add the unique ID for tracking
-          const donationId = getDonationUniqueId(newDonation);
-          console.log(`Generated unique ID for database donation: ${donationId}`);
-          
-          // Send to WebSocket for broadcasting to OBS clients
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            console.log("Broadcasting donation to WebSocket");
-            wsRef.current.send(JSON.stringify({
-              type: "donation",
-              donation: newDonation,
-              idempotencyKey: donationId // Add idempotency key for duplicate detection
-            }));
-          } else {
-            console.warn("WebSocket not ready, can't broadcast donation");
-            // Attempt to reconnect the WebSocket
-            if (!wsRef.current || wsRef.current.readyState !== WebSocket.CONNECTING) {
-              handleReconnect();
-            }
-          }
-          
-          // Also handle locally
-          handleNewDonation(newDonation);
-        }
-      )
-      .subscribe();
-
-    // Fetch the initial 20 most recent donations for this user
+    console.log("Fetching recent donations for user:", user.id);
+    
     const fetchRecentDonations = async () => {
-      if (!user?.id) return;
+      // Clear seen alerts to prevent issues with initial loading
+      seenAlerts.current.clear();
       
-      console.log("Fetching recent donations for user:", user.id);
-      
+      // Fetch the initial 20 most recent donations for this user
       const { data, error } = await supabase
         .from('donations')
         .select('*')
@@ -381,9 +307,6 @@ const LiveAlertsPage = () => {
       if (data) {
         console.log("Fetched donations:", data.length);
         
-        // Clear seen alerts to prevent issues with initial loading
-        seenAlerts.current.clear();
-        
         // Process each donation
         setAlerts(data);
         
@@ -395,12 +318,7 @@ const LiveAlertsPage = () => {
     };
 
     fetchRecentDonations();
-
-    // Cleanup on unmount
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [user?.id, isOBSMode, getDonationUniqueId, handleNewDonation]);
+  }, [user?.id, isOBSMode, getDonationUniqueId]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -441,50 +359,99 @@ const LiveAlertsPage = () => {
     
     if (result.error) {
       toast.error("Failed to send test alert: " + (result.error.message || "Unknown error"));
-    } else {
-      toast.success("Test alert sent");
     }
   };
 
-  // Function to manually reconnect WebSocket with improved reliability
+  // Function to manually reconnect with improved reliability
   const handleReconnect = () => {
-    if (wsRef.current) {
-      console.log("Manually closing WebSocket for reconnection");
-      wsRef.current.close();
-      wsRef.current = null;
+    setIsConnecting(true);
+    
+    // Clean up existing subscriptions
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
     
-    // Clear any pending reconnect timeouts
-    if (wsReconnectTimeoutRef.current !== null) {
-      window.clearTimeout(wsReconnectTimeoutRef.current);
-      wsReconnectTimeoutRef.current = null;
+    if (presenceChannelRef.current) {
+      supabase.removeChannel(presenceChannelRef.current);
+      presenceChannelRef.current = null;
     }
     
-    // Wait a moment before attempting to reconnect
+    // Wait a moment then reconnect
     setTimeout(() => {
       const targetChannel = isOBSMode && channelId ? channelId : user?.id;
+      
       if (targetChannel) {
-        console.log("Manually reconnecting WebSocket");
-        setIsConnecting(true);
-        
-        createAlertWebSocket(targetChannel, isOBSMode ? "consumer" : "producer")
-          .then(socket => {
-            wsRef.current = socket;
-            setConnected(true);
-            setIsConnecting(false);
-            toast.success("Reconnected to alert system");
-            
-            // Send a test ping
-            socket.send(JSON.stringify({
-              type: "ping",
-              timestamp: new Date().toISOString()
-            }));
+        // Test the connection first
+        testRealtimeConnection(targetChannel)
+          .then(isConnected => {
+            if (isConnected) {
+              toast.success("Connection test successful, reconnecting...");
+              
+              // Set up realtime again after successful test
+              const channel = supabase
+                .channel(`alerts-${targetChannel}-${uuidv4().substring(0, 8)}`)
+                .on('postgres_changes', 
+                  { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'donations',
+                    filter: `user_id=eq.${targetChannel}`
+                  },
+                  (payload) => {
+                    console.log('Donation received via Realtime:', payload);
+                    const newDonation = payload.new as Donation;
+                    handleNewDonation(newDonation);
+                  }
+                )
+                .subscribe((status) => {
+                  console.log(`Reconnection status: ${status}`);
+                  
+                  if (status === 'SUBSCRIBED') {
+                    setConnected(true);
+                    setIsConnecting(false);
+                    toast.success("Reconnected to alert system");
+                  } else if (status === 'CHANNEL_ERROR') {
+                    setConnected(false);
+                    setIsConnecting(false);
+                    toast.error("Reconnection failed, please try again");
+                  }
+                });
+                
+              channelRef.current = channel;
+              
+              // Also set up presence for connection monitoring
+              const presenceChannel = supabase
+                .channel(`presence-${targetChannel}`)
+                .on('presence', { event: 'sync' }, () => {
+                  console.log('Presence state synchronized');
+                })
+                .subscribe(async (status) => {
+                  if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({ 
+                      user_id: targetChannel,
+                      client_id: uuidv4().substring(0, 8),
+                      reconnected_at: new Date().toISOString(),
+                      mode: isOBSMode ? 'obs' : 'dashboard'
+                    });
+                  }
+                });
+                
+              presenceChannelRef.current = presenceChannel;
+              
+            } else {
+              toast.error("Connection test failed, please check your internet connection");
+              setIsConnecting(false);
+            }
           })
           .catch(err => {
-            console.error("Error during manual reconnection:", err);
+            console.error("Error during manual reconnection test:", err);
             setIsConnecting(false);
-            toast.error("Failed to reconnect, please try again");
+            toast.error("Failed to test connection, please try again");
           });
+      } else {
+        setIsConnecting(false);
+        toast.error("No channel ID available for reconnection");
       }
     }, 500);
   };
@@ -696,7 +663,7 @@ const LiveAlertsPage = () => {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This URL connects to our WebSocket server to display alerts without complex authentication
+                This URL connects to our realtime system to display alerts without complex authentication
               </p>
             </div>
 
