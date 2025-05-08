@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from "react";
+
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Bell, AlertTriangle, RefreshCw } from "lucide-react";
+import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { validateOBSToken, getOBSUrl } from "@/utils/obsUtils";
+import { sendTestAlert } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -26,77 +27,18 @@ const LiveAlertsPage = () => {
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
-  const [authStatus, setAuthStatus] = useState<'loading' | 'authenticated' | 'error'>('loading');
-  const [authError, setAuthError] = useState<string | null>(null);
   const { activeStyle, isLoading: styleLoading } = useAlertStyle();
   const { user } = useAuth();
+  
+  // WebSocket references
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsReconnectTimeoutRef = useRef<number | null>(null);
   
   // Get parameters from URL
   const urlParams = new URLSearchParams(window.location.search);
   const isOBSMode = urlParams.get('obs') === 'true';
-  const obsToken = urlParams.get('token');
+  const channelId = urlParams.get('channel');
   
-  // State for token-authenticated userId
-  const [tokenUserId, setTokenUserId] = useState<string | null>(null);
-  
-  // The effective userId to use for subscriptions
-  // In OBS mode with token, use the token's userId
-  // Otherwise, use the authenticated user's ID
-  const effectiveUserId = isOBSMode && tokenUserId ? tokenUserId : user?.id;
-
-  // Validate token if in OBS mode - updated with more robust error handling
-  useEffect(() => {
-    const validateToken = async () => {
-      // Only validate if in OBS mode and we have a token
-      if (!isOBSMode || !obsToken) {
-        if (!isOBSMode) {
-          // Not in OBS mode, so we rely on regular authentication
-          setAuthStatus(user ? 'authenticated' : 'error');
-        } else {
-          // In OBS mode but no token provided
-          console.error("OBS Mode active but no token provided");
-          setAuthError("No authentication token provided");
-          setAuthStatus('error');
-        }
-        return;
-      }
-
-      console.log("LiveAlertsPage: Validating OBS token:", obsToken);
-      const { userId, error } = await validateOBSToken(obsToken);
-      
-      if (error || !userId) {
-        console.error("LiveAlertsPage: Token validation failed:", error);
-        setAuthError(error?.toString() || "Token validation failed");
-        setAuthStatus('error');
-        
-        // Additional logging to help debug the issue
-        console.log("LiveAlertsPage: Authentication failed with token:", obsToken);
-        
-        // Check if there are any tokens in the database for debugging
-        const { count, error: countError } = await supabase
-          .from('obs_tokens')
-          .select('*', { count: 'exact', head: true });
-        
-        console.log(`LiveAlertsPage: Total tokens in database: ${count || 'unknown'}, Error: ${countError || 'None'}`);
-        return;
-      }
-      
-      console.log("LiveAlertsPage: Token validated successfully, using user ID:", userId);
-      setTokenUserId(userId);
-      setAuthStatus('authenticated');
-    };
-    
-    validateToken();
-  }, [isOBSMode, obsToken, user]);
-
-  console.log("LiveAlertsPage: Auth Status:", authStatus);
-  console.log("LiveAlertsPage: Auth Error:", authError);
-  console.log("LiveAlertsPage: Effective user ID:", effectiveUserId);
-  console.log("LiveAlertsPage: Is OBS Mode:", isOBSMode);
-  console.log("LiveAlertsPage: OBS Token:", obsToken ? "Provided" : "Not provided");
-  console.log("LiveAlertsPage: Active style:", activeStyle);
-  console.log("LiveAlertsPage: Style loading:", styleLoading);
-
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -108,18 +50,143 @@ const LiveAlertsPage = () => {
   
   // Check if donation is a test donation
   const isTestDonation = (payment_id: string) => {
-    return payment_id.startsWith('test_');
+    return payment_id?.startsWith('test_') || false;
+  };
+
+  // WebSocket setup for OBS alerts
+  useEffect(() => {
+    if (isOBSMode && channelId) {
+      console.log("OBS Mode: Setting up WebSocket connection for channel:", channelId);
+      connectWebSocket(channelId, "consumer");
+    } else if (user?.id) {
+      // For the dashboard, connect as a producer
+      console.log("Producer Mode: Setting up WebSocket connection for user:", user.id);
+      connectWebSocket(user.id, "producer");
+    }
+    
+    return () => {
+      // Clean up WebSocket connection on unmount
+      if (wsRef.current) {
+        console.log("Closing WebSocket connection");
+        wsRef.current.close();
+      }
+      
+      // Clear any pending reconnect timeouts
+      if (wsReconnectTimeoutRef.current !== null) {
+        window.clearTimeout(wsReconnectTimeoutRef.current);
+      }
+    };
+  }, [isOBSMode, channelId, user?.id]);
+
+  // Connect to the WebSocket server
+  const connectWebSocket = (channel: string, mode: "producer" | "consumer") => {
+    try {
+      // Close existing connection if any
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      
+      // Clear any pending reconnect timeouts
+      if (wsReconnectTimeoutRef.current !== null) {
+        window.clearTimeout(wsReconnectTimeoutRef.current);
+      }
+      
+      // Get base URL (from current URL)
+      const baseUrl = window.location.origin.replace('http', 'ws');
+      const wsUrl = `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channel}&mode=${mode}`;
+      console.log("Connecting to WebSocket:", wsUrl);
+      
+      const socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+      
+      socket.onopen = () => {
+        console.log("WebSocket connected");
+        setConnected(true);
+        toast.success("Connected to alert system");
+      };
+      
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("WebSocket message received:", data);
+          
+          if (data.type === "donation") {
+            const newDonation = data.donation as Donation;
+            handleNewDonation(newDonation);
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      };
+      
+      socket.onclose = (event) => {
+        console.log("WebSocket disconnected:", event.code, event.reason);
+        setConnected(false);
+        
+        if (!event.wasClean) {
+          toast.error("Disconnected from alert system. Reconnecting...");
+          // Attempt to reconnect after a delay
+          wsReconnectTimeoutRef.current = window.setTimeout(() => {
+            console.log("Attempting to reconnect...");
+            connectWebSocket(channel, mode);
+          }, 5000);
+        }
+      };
+      
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setConnected(false);
+        toast.error("Connection error. Will attempt to reconnect.");
+      };
+      
+      // Add authentication for producer mode
+      if (mode === "producer") {
+        // Add event handler to send auth token after connection
+        socket.addEventListener("open", async () => {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.access_token) {
+            socket.send(JSON.stringify({ 
+              type: "auth", 
+              token: data.session.access_token 
+            }));
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error setting up WebSocket:", error);
+      setConnected(false);
+    }
+  };
+
+  // Handle a new donation alert
+  const handleNewDonation = (newDonation: Donation) => {
+    // Add to alerts list
+    setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
+    
+    // Set as last alert to highlight it
+    setLastAlert(newDonation);
+    
+    // Show toast notification if not in OBS mode
+    if (!isOBSMode) {
+      const isTest = isTestDonation(newDonation.payment_id) ? " (Test)" : "";
+      toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
+        description: newDonation.message || "No message",
+      });
+    }
+    
+    // Reset last alert highlight after several seconds
+    const duration = activeStyle?.duration || 5;
+    setTimeout(() => {
+      setLastAlert(null);
+    }, duration * 1000);
   };
 
   // Set up real-time subscription when userId is available
   useEffect(() => {
-    // Don't attempt to subscribe if no valid user ID is available or if authentication failed
-    if (!effectiveUserId || authStatus !== 'authenticated') {
-      console.log("LiveAlertsPage: No valid user ID available or authentication failed, skipping donation subscription");
-      return;
-    }
+    // Only set up the subscription in producer mode (not OBS mode)
+    if (isOBSMode || !user?.id) return;
 
-    console.log("LiveAlertsPage: Setting up subscription for user:", effectiveUserId);
+    console.log("Setting up subscription for user:", user.id);
 
     // Subscribe to real-time updates for donations for this specific user
     const channel = supabase
@@ -129,62 +196,46 @@ const LiveAlertsPage = () => {
           event: 'INSERT', 
           schema: 'public', 
           table: 'donations',
-          filter: `user_id=eq.${effectiveUserId}`
+          filter: `user_id=eq.${user.id}`
         }, 
         (payload) => {
           const newDonation = payload.new as Donation;
-          console.log('LiveAlertsPage: New donation received:', newDonation);
+          console.log('New donation received from database:', newDonation);
           
-          // Add to alerts list
-          setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
-          
-          // Set as last alert to highlight it
-          setLastAlert(newDonation);
-          
-          // Show toast notification if not in OBS mode
-          if (!isOBSMode) {
-            const isTest = isTestDonation(newDonation.payment_id) ? " (Test)" : "";
-            toast(newDonation.donor_name + isTest + " donated " + formatIndianRupees(newDonation.amount), {
-              description: newDonation.message || "No message",
-            });
+          // Send to WebSocket for broadcasting to OBS clients
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: "donation",
+              donation: newDonation
+            }));
           }
           
-          // Reset last alert highlight after several seconds
-          const duration = activeStyle?.duration || 5;
-          setTimeout(() => {
-            setLastAlert(null);
-          }, duration * 1000);
+          // Also handle locally
+          handleNewDonation(newDonation);
         }
       )
-      .subscribe((status) => {
-        console.log('LiveAlertsPage: Subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          setConnected(true);
-        } else {
-          setConnected(false);
-        }
-      });
+      .subscribe();
 
     // Fetch the initial 20 most recent donations for this user
     const fetchRecentDonations = async () => {
-      if (!effectiveUserId) return;
+      if (!user?.id) return;
       
-      console.log("LiveAlertsPage: Fetching recent donations for user:", effectiveUserId);
+      console.log("Fetching recent donations for user:", user.id);
       
       const { data, error } = await supabase
         .from('donations')
         .select('*')
-        .eq('user_id', effectiveUserId)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
       
       if (error) {
-        console.error('LiveAlertsPage: Error fetching recent donations:', error);
+        console.error('Error fetching recent donations:', error);
         return;
       }
       
       if (data) {
-        console.log("LiveAlertsPage: Fetched donations:", data.length);
+        console.log("Fetched donations:", data.length);
         setAlerts(data);
       }
     };
@@ -195,7 +246,7 @@ const LiveAlertsPage = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [effectiveUserId, authStatus, activeStyle?.duration, isOBSMode]);
+  }, [user?.id, isOBSMode]);
 
   // Format the timestamp for display
   const formatTime = (timestamp: string) => {
@@ -224,47 +275,26 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // If in OBS mode and authentication failed, show an improved error with more helpful information
-  if (isOBSMode && authStatus === 'error') {
+  // If in OBS mode and no channel ID provided, show error
+  if (isOBSMode && !channelId) {
     return (
       <div className="flex items-center justify-center h-screen bg-background p-4">
         <Alert variant="destructive" className="max-w-md shadow-lg">
           <AlertTriangle className="h-6 w-6" />
-          <AlertTitle>Authentication Failed</AlertTitle>
+          <AlertTitle>Configuration Error</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>{authError || "The OBS authentication token is invalid or expired."}</p>
+            <p>Missing channel ID parameter. The OBS browser source URL is not configured correctly.</p>
             
             <div className="mt-2 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
-              <h4 className="font-bold mb-1">Troubleshooting steps:</h4>
+              <h4 className="font-bold mb-1">Troubleshooting:</h4>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Return to the StreamDonate dashboard</li>
-                <li>Go to Setup page and click "Regenerate New Token"</li>
-                <li>Copy the new URL to your OBS browser source</li>
-                <li>In OBS, right-click your browser source and select "Refresh cache of current page"</li>
-                <li>Make sure "Refresh browser when scene becomes active" is enabled in OBS</li>
+                <li>Go to Setup page and copy the correct OBS URL</li>
+                <li>Make sure the URL includes the channel parameter</li>
               </ol>
-            </div>
-            
-            <div className="mt-4">
-              <a 
-                href="/" 
-                className="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Return to Dashboard
-              </a>
             </div>
           </AlertDescription>
         </Alert>
-      </div>
-    );
-  }
-
-  // If in OBS mode and still loading authentication, show a loading state
-  if (isOBSMode && authStatus === 'loading') {
-    return (
-      <div className="flex items-center justify-center h-screen bg-transparent">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-primary"></div>
       </div>
     );
   }
@@ -282,8 +312,6 @@ const LiveAlertsPage = () => {
     
     const alertStyle = activeStyle || getFallbackStyle();
     
-    console.log("LiveAlertsPage: Using alert style in OBS mode:", alertStyle);
-    
     return (
       <div className="obs-container" style={{ 
         background: 'transparent',
@@ -292,6 +320,13 @@ const LiveAlertsPage = () => {
         overflow: 'hidden',
         position: 'relative'
       }}>
+        {/* Connection indicator (only visible when disconnected) */}
+        {!connected && (
+          <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full flex items-center text-xs">
+            <WifiOff className="h-3 w-3 mr-1" /> Disconnected
+          </div>
+        )}
+        
         {lastAlert && (
           <div 
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
@@ -342,7 +377,9 @@ const LiveAlertsPage = () => {
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center mt-2 sm:mt-0">
           <Badge 
             variant={connected ? "default" : "destructive"}
+            className="flex items-center gap-1"
           >
+            {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
             {connected ? "Connected" : "Disconnected"}
           </Badge>
           <button
@@ -366,31 +403,25 @@ const LiveAlertsPage = () => {
                 <input
                   type="text"
                   readOnly
-                  value={user ? "Loading secure OBS URL..." : "Please sign in"}
+                  value={user ? `${window.location.origin}/live-alerts?obs=true&channel=${user.id}` : "Please sign in"}
                   className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
                 />
                 <button 
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90 disabled:opacity-50"
-                  onClick={async () => {
-                    const url = await getOBSUrl();
-                    if (url) {
-                      navigator.clipboard.writeText(url);
-                      toast("Copied!", {
-                        description: "Secure OBS URL copied to clipboard"
-                      });
-                    } else {
-                      toast("Error", {
-                        description: "Could not generate URL. Please try again."
-                      });
-                    }
+                  onClick={() => {
+                    const url = `${window.location.origin}/live-alerts?obs=true&channel=${user?.id}`;
+                    navigator.clipboard.writeText(url);
+                    toast("Copied!", {
+                      description: "Secure OBS URL copied to clipboard"
+                    });
                   }}
                   disabled={!user}
                 >
-                  Generate & Copy
+                  Copy
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This secure URL contains a unique token that allows OBS to display your alerts without requiring login
+                This URL connects to our WebSocket server to display alerts without complex authentication
               </p>
             </div>
 
@@ -398,7 +429,7 @@ const LiveAlertsPage = () => {
               <p className="font-medium">Instructions:</p>
               <ol className="list-decimal list-inside space-y-2">
                 <li>In OBS Studio, add a new "Browser" source</li>
-                <li>Click "Generate & Copy" and paste the URL into the URL field</li>
+                <li>Copy and paste the URL above into the URL field</li>
                 <li>Set the width to 1280 and height to 720</li>
                 <li><strong className="text-primary">Enable "Refresh browser when scene becomes active"</strong></li>
                 <li>Click OK to save</li>
@@ -406,10 +437,10 @@ const LiveAlertsPage = () => {
             </div>
             
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
-              <h3 className="font-medium mb-1">Security Note</h3>
+              <h3 className="font-medium mb-1">New WebSocket Connection</h3>
               <p className="text-sm">
-                The OBS URL contains a secure token that is tied to your account. Keep this URL private and regenerate it
-                if you suspect it has been compromised.
+                This updated system uses WebSockets for a more reliable connection. If you were using the previous version,
+                please update your OBS browser source with the new URL above.
               </p>
             </div>
             
@@ -428,45 +459,20 @@ const LiveAlertsPage = () => {
               <div className="flex items-start space-x-2">
                 <RefreshCw className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div>
-                  <h3 className="font-medium text-blue-800">Authentication Issues?</h3>
+                  <h3 className="font-medium text-blue-800">Test the Connection</h3>
                   <p className="text-sm text-blue-600 mb-2">
-                    If your OBS is showing authentication errors, go to the Setup page and click "Regenerate New Token".
-                    This will create a new token and invalidate the old one.
+                    Send a test alert to verify your OBS setup is working correctly.
                   </p>
                   <button
                     onClick={async () => {
-                      const url = await getOBSUrl(true);
-                      if (url) {
-                        navigator.clipboard.writeText(url);
-                        toast("New token generated!", {
-                          description: "New secure OBS URL copied to clipboard. Make sure to update your OBS source."
-                        });
-                      }
+                      await sendTestAlert();
+                      toast.success("Test alert sent!");
                     }}
                     className="text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md"
                     disabled={!user}
                   >
-                    Regenerate Now
+                    Send Test Alert
                   </button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
-              <div className="flex items-start space-x-2">
-                <AlertTriangle className="h-5 w-5 text-rose-600 mt-0.5" />
-                <div>
-                  <h3 className="font-medium text-rose-800">Still Having Issues?</h3>
-                  <p className="text-sm text-rose-600 mb-2">
-                    If you're still seeing authentication errors after regenerating the token:
-                  </p>
-                  <ol className="text-sm text-rose-700 list-decimal list-inside space-y-1">
-                    <li>Clear your browser cache or try a different browser</li>
-                    <li>In OBS, right-click your browser source and select "Properties"</li>
-                    <li>Click "Refresh cache of current page"</li>
-                    <li>Check that "Refresh browser when scene becomes active" is enabled</li>
-                    <li>Try completely removing and re-adding the browser source</li>
-                  </ol>
                 </div>
               </div>
             </div>

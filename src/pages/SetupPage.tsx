@@ -25,13 +25,14 @@ import {
   RefreshCw,
   XCircle,
   AlertTriangle,
+  Wifi,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl, checkUserHasToken, regenerateOBSToken } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl, checkUserHasToken } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -44,67 +45,76 @@ const SetupPage = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
   const [obsUrl, setObsUrl] = useState<string>("");
-  const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
-  const [hasExistingToken, setHasExistingToken] = useState(false);
-  const [tokenGenerationRetries, setTokenGenerationRetries] = useState(0);
-  const [regenerationStatus, setRegenerationStatus] = useState<"idle" | "success" | "error">("idle");
-  const MAX_RETRIES = 2;
-  
-  // Enhanced token check and OBS URL generation with retries
+  const [wsConnectionStatus, setWsConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+  const [wsRef, setWsRef] = useState<WebSocket | null>(null);
+
   useEffect(() => {
-    const checkTokenAndGetUrl = async () => {
-      if (!user) return;
+    // Generate OBS URL when user is available
+    if (user) {
+      const url = `${window.location.origin}/live-alerts?obs=true&channel=${user.id}`;
+      setObsUrl(url);
       
-      setIsGeneratingUrl(true);
-      try {
-        // First check if user has an existing token
-        const { hasToken } = await checkUserHasToken();
-        setHasExistingToken(hasToken);
-        
-        // Get or generate the OBS URL
-        let url = await getOBSUrl();
-        
-        // If URL generation failed but we have a token, try regenerating
-        if (!url && hasToken) {
-          console.log("Initial URL generation failed, trying forced regeneration");
-          url = await getOBSUrl(true);
-          
-          if (url) {
-            setTokenGenerationRetries(prev => prev + 1);
-            toast({
-              title: "Token Regenerated",
-              description: "Previous token may have been invalid. New URL has been generated.",
-            });
-          }
-        }
-        
-        // Set the URL if we have one
-        if (url) {
-          setObsUrl(url);
-        } else {
-          console.error("Failed to generate OBS URL after retries");
-          toast({
-            title: "Token Generation Issue",
-            description: "Could not generate a valid token. Please try the 'Regenerate New Token' button.",
-            variant: "destructive"
-          });
-        }
-      } catch (error) {
-        console.error("Error generating OBS URL:", error);
-        toast({
-          title: "Error",
-          description: "Could not connect to the server. Please try again.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsGeneratingUrl(false);
+      // Test WebSocket connection
+      testWebSocketConnection(user.id);
+    }
+    
+    return () => {
+      // Close WebSocket connection when component unmounts
+      if (wsRef) {
+        wsRef.close();
       }
     };
-    
-    if (user) {
-      checkTokenAndGetUrl();
-    }
   }, [user]);
+  
+  // Test WebSocket connection to verify edge function is working
+  const testWebSocketConnection = (channelId: string) => {
+    try {
+      setWsConnectionStatus("connecting");
+      
+      // Close existing connection if any
+      if (wsRef) {
+        wsRef.close();
+      }
+      
+      // Create WebSocket connection
+      const wsUrl = `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channelId}&mode=producer`;
+      console.log("Testing WebSocket connection:", wsUrl);
+      
+      const socket = new WebSocket(wsUrl);
+      setWsRef(socket);
+      
+      socket.onopen = async () => {
+        console.log("WebSocket connected");
+        setWsConnectionStatus("connected");
+        
+        // Send authentication token
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.access_token) {
+          socket.send(JSON.stringify({ 
+            type: "auth", 
+            token: data.session.access_token 
+          }));
+        }
+        
+        // Close connection after auth test
+        setTimeout(() => {
+          socket.close();
+        }, 2000);
+      };
+      
+      socket.onclose = () => {
+        console.log("WebSocket test connection closed");
+      };
+      
+      socket.onerror = (error) => {
+        console.error("WebSocket test connection error:", error);
+        setWsConnectionStatus("disconnected");
+      };
+    } catch (error) {
+      console.error("Error testing WebSocket connection:", error);
+      setWsConnectionStatus("disconnected");
+    }
+  };
 
   const validateUpiId = () => {
     const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
@@ -174,98 +184,6 @@ const SetupPage = () => {
     }
   };
 
-  // Function to generate/regenerate the OBS URL with enhanced reliability
-  const generateObsUrl = async (forceRegenerateToken = false) => {
-    setIsGeneratingUrl(true);
-    try {
-      let url = await getOBSUrl(forceRegenerateToken);
-      
-      // If URL generation failed and we haven't exceeded retry limit
-      if (!url && tokenGenerationRetries < MAX_RETRIES) {
-        console.log(`URL generation failed, retrying (attempt ${tokenGenerationRetries + 1})`);
-        
-        // Force token regeneration on retry
-        url = await getOBSUrl(true);
-        setTokenGenerationRetries(prev => prev + 1);
-      }
-      
-      if (url) {
-        setObsUrl(url);
-        setHasExistingToken(true);
-        toast({
-          title: forceRegenerateToken ? "URL Regenerated" : "URL Generated",
-          description: forceRegenerateToken 
-            ? "New secure OBS Browser Source URL has been created. Previous URL is no longer valid."
-            : "Secure OBS Browser Source URL has been created.",
-        });
-      } else {
-        // Suggest manual token regeneration if retries failed
-        toast({
-          title: "URL Generation Failed",
-          description: "Please try clicking the 'Regenerate New Token' button to create a fresh token.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error generating OBS URL:", error);
-      toast({
-        title: "Error",
-        description: "Could not generate URL. Server may be unavailable.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingUrl(false);
-    }
-  };
-
-  // Direct function for token regeneration with enhanced feedback
-  const handleForceTokenRegeneration = async () => {
-    setIsGeneratingUrl(true);
-    setRegenerationStatus("idle");
-    
-    try {
-      // First directly regenerate the token
-      const { token, error } = await regenerateOBSToken();
-      
-      if (error || !token) {
-        console.error("Error during forced token regeneration:", error);
-        setRegenerationStatus("error");
-        toast({
-          title: "Token Regeneration Failed",
-          description: "Could not create new token. Please try again later.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Now get a URL with the new token
-      const uniqueId = Math.random().toString(36).substring(2, 10);
-      const timestamp = new Date().getTime();
-      const baseUrl = window.location.origin;
-      const url = `${baseUrl}/live-alerts?obs=true&token=${token}&t=${timestamp}&uid=${uniqueId}`;
-      
-      setObsUrl(url);
-      setHasExistingToken(true);
-      setRegenerationStatus("success");
-      
-      toast({
-        title: "Token Successfully Regenerated",
-        description: "New OBS URL created. Update this in your OBS browser source and refresh the cache.",
-      });
-      
-    } catch (error) {
-      console.error("Exception during forced token regeneration:", error);
-      setRegenerationStatus("error");
-      toast({
-        title: "Unexpected Error",
-        description: "Please try again or contact support if the issue persists.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingUrl(false);
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">Setup your donation page</h1>
@@ -320,7 +238,14 @@ const SetupPage = () => {
         {currentStep === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle>Integration Links</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Integration Links</span>
+                {wsConnectionStatus === "connected" && (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 flex items-center gap-1 border-green-200">
+                    <Wifi className="h-3 w-3" /> WebSocket Connected
+                  </Badge>
+                )}
+              </CardTitle>
               <CardDescription>
                 Use these to accept payments and display alerts on your stream
               </CardDescription>
@@ -363,12 +288,20 @@ const SetupPage = () => {
                   </div>
                 </TabsContent>
                 <TabsContent value="obs-link" className="space-y-4 pt-4">
+                  <Alert variant="default" className="bg-blue-50 border-blue-200">
+                    <Wifi className="h-5 w-5 text-blue-600" />
+                    <AlertTitle className="text-blue-800">New WebSocket Connection System</AlertTitle>
+                    <AlertDescription className="text-blue-700">
+                      We've upgraded to a more reliable WebSocket-based alert system. Copy and use the new URL below in your OBS browser source.
+                    </AlertDescription>
+                  </Alert>
+
                   <div className="space-y-2">
-                    <Label htmlFor="obs-url">Secure OBS Browser Source URL</Label>
+                    <Label htmlFor="obs-url">OBS Browser Source URL:</Label>
                     <div className="flex">
                       <Input
                         id="obs-url"
-                        value={obsUrl || "Click Generate to create a secure URL"}
+                        value={obsUrl || "Loading..."}
                         readOnly
                         className="font-mono text-xs"
                       />
@@ -382,36 +315,22 @@ const SetupPage = () => {
                           } else {
                             toast({
                               title: "Error",
-                              description: "Generate a URL first before copying.",
+                              description: "URL not available yet. Please wait.",
                               variant: "destructive",
                             });
                           }
                         }}
-                        disabled={!obsUrl || isGeneratingUrl}
+                        disabled={!obsUrl}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="ml-1"
-                        onClick={() => generateObsUrl(false)}
-                        disabled={isGeneratingUrl || hasExistingToken}
-                        title={hasExistingToken ? "You already have a token" : "Generate Secure URL"}
-                      >
-                        {isGeneratingUrl ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <FileUp className="h-4 w-4" />
-                        )}
-                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This secure URL contains a unique token that allows OBS to display your alerts without requiring login
+                      This URL connects to our WebSocket server for reliable real-time alerts
                     </p>
                   </div>
 
-                  {/* Enhanced troubleshooting information */}
+                  {/* Instructions */}
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                     <div className="flex items-center space-x-2">
                       <AlertTriangle className="h-5 w-5 text-yellow-600" />
@@ -420,78 +339,19 @@ const SetupPage = () => {
                     <ul className="text-sm text-yellow-700 mt-2 space-y-1 ml-6 list-disc">
                       <li><strong>Always enable "Refresh browser when scene becomes active"</strong> in OBS browser source settings</li>
                       <li>Set width to 1280 and height to 720</li>
-                      <li>If you see authentication errors, use the "Regenerate New Token" button below</li>
+                      <li>Clear browser cache if you experience connection issues</li>
                     </ul>
-                  </div>
-
-                  {/* Show success/error alerts for token regeneration */}
-                  {regenerationStatus === "success" && (
-                    <Alert variant="default" className="bg-green-50 border-green-200">
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      <AlertTitle className="text-green-800">Token Regenerated Successfully</AlertTitle>
-                      <AlertDescription className="text-green-700">
-                        Your OBS token has been updated. Copy the new URL above and update it in your OBS browser source.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  
-                  {regenerationStatus === "error" && (
-                    <Alert variant="destructive">
-                      <XCircle className="h-5 w-5" />
-                      <AlertTitle>Regeneration Failed</AlertTitle>
-                      <AlertDescription>
-                        Could not regenerate token. Please try again in a few moments.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {/* Enhanced token regeneration section */}
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">
-                    <div className="flex items-start space-x-2">
-                      <RefreshCw className="h-5 w-5 text-rose-600 mt-0.5" />
-                      <div>
-                        <h3 className="font-medium text-rose-800">Regenerate Token</h3>
-                        <p className="text-sm text-rose-600 mb-2">
-                          Having authentication issues? Generate a new token to replace the existing one.
-                          <strong> This will invalidate previous links.</strong>
-                        </p>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700"
-                          onClick={handleForceTokenRegeneration}
-                          disabled={isGeneratingUrl}
-                        >
-                          {isGeneratingUrl ? (
-                            <><RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Regenerating...</>
-                          ) : (
-                            <>Regenerate New Token</>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
                   </div>
 
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold">How to add to OBS:</h4>
                     <ol className="space-y-2 mt-2 list-decimal list-inside text-sm">
                       <li>In OBS, add a new "Browser Source"</li>
-                      <li>Generate and copy the URL above, then paste it into the URL field</li>
+                      <li>Copy and paste the URL above into the URL field</li>
                       <li>Set width to 1280 and height to 720</li>
                       <li><strong className="text-primary">Check "Refresh browser when scene becomes active"</strong></li>
-                      <li>Click "Refresh cache of current page" if you regenerate the token</li>
+                      <li>Click OK to save</li>
                     </ol>
-                  </div>
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800">
-                    <h4 className="font-medium mb-1">Troubleshooting</h4>
-                    <p className="text-sm">
-                      If you still see authentication errors after regenerating:
-                    </p>
-                    <ul className="list-disc list-inside text-sm mt-1">
-                      <li>Clear your browser cache</li>
-                      <li>Try completely removing and re-adding the browser source in OBS</li>
-                      <li>Make sure you've updated the URL in OBS after regenerating the token</li>
-                    </ul>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -576,14 +436,14 @@ const SetupPage = () => {
                   <div>
                     <h3 className="font-medium text-blue-800">Troubleshooting</h3>
                     <p className="text-sm text-blue-600 mb-2">
-                      If your OBS is showing authentication errors, try these steps:
+                      If you're experiencing issues with your OBS alerts, try these steps:
                     </p>
                     <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-                      <li>Go back to the "Generate Links" step and click "Regenerate New Token"</li>
-                      <li>Copy the new URL and update it in your OBS Browser Source</li>
-                      <li>Make sure to check "Refresh browser when scene becomes active" in OBS</li>
-                      <li>Sometimes you need to completely remove and re-add the Browser Source in OBS</li>
-                      <li>Try clearing your browser cache if you're still having issues</li>
+                      <li>Make sure the WebSocket connection is established (check for "WebSocket Connected" badge)</li>
+                      <li>In OBS, right-click your browser source and select "Refresh cache of current page"</li>
+                      <li>Make sure "Refresh browser when scene becomes active" is checked</li>
+                      <li>Try completely removing and re-adding the browser source in OBS</li>
+                      <li>Verify that your internet connection is stable</li>
                     </ol>
                   </div>
                 </div>
