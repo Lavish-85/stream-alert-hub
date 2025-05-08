@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
@@ -179,19 +178,19 @@ export const createAlertWebSocket = (channelId: string, mode = "consumer"): Prom
         }));
         
         // Start periodic ping to keep connection alive
-        const pingInterval = setInterval(() => {
+        const pingIntervalValue = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
               type: "ping",
               timestamp: new Date().toISOString()
             }));
           } else {
-            clearInterval(pingInterval);
+            clearInterval(pingIntervalValue);
           }
         }, 30000); // Send ping every 30 seconds
         
         // Add pingInterval to the socket object so it can be cleared on close
-        socket.pingInterval = pingInterval;
+        socket.pingInterval = pingIntervalValue;
         
         resolve(socket);
       };

@@ -12,12 +12,53 @@ console.log("Alert WebSocket server starting up");
 // Track all active connections by channel
 const connections = new Map<string, Set<WebSocket>>();
 
+// Track donors to prevent duplicate donations
+const recentDonations = new Map<string, Set<string>>();
+
+// Helper to clean up old donation records to prevent memory leaks
+function cleanupOldDonations() {
+  for (const [channelId, donations] of recentDonations.entries()) {
+    if (donations.size > 100) { // Set a maximum size for tracking
+      // Convert to array, sort by newest first (if they're timestamps), and take only the latest 50
+      const donationsArray = Array.from(donations);
+      recentDonations.set(channelId, new Set(donationsArray.slice(0, 50)));
+    }
+  }
+  
+  // Schedule next cleanup
+  setTimeout(cleanupOldDonations, 60000); // Run every minute
+}
+
+// Start donation cleanup
+cleanupOldDonations();
+
 // Helper to broadcast alerts to a specific channel
 function broadcastToChannel(channelId: string, data: any) {
   const channelConnections = connections.get(channelId);
   if (!channelConnections) {
     console.log(`No connections found for channel ${channelId}`);
     return;
+  }
+  
+  // Don't broadcast duplicates
+  if (data.type === "donation" && data.donation && data.donation.payment_id) {
+    const donationId = data.donation.payment_id;
+    
+    // Initialize set for this channel if needed
+    if (!recentDonations.has(channelId)) {
+      recentDonations.set(channelId, new Set());
+    }
+    
+    const channelDonations = recentDonations.get(channelId)!;
+    
+    // Check if we've already broadcast this donation
+    if (channelDonations.has(donationId)) {
+      console.log(`Skipping duplicate donation: ${donationId}`);
+      return;
+    }
+    
+    // Add to set of donations we've broadcast
+    channelDonations.add(donationId);
   }
   
   const message = JSON.stringify(data);
@@ -89,6 +130,63 @@ async function validateUserId(userId: string): Promise<boolean> {
   }
 }
 
+// Configure keepalive for all websockets
+const KEEPALIVE_INTERVAL = 30000; // 30 seconds
+let keepaliveInterval: number;
+
+function startKeepAlive() {
+  // Clear existing interval if any
+  if (keepaliveInterval) {
+    clearInterval(keepaliveInterval);
+  }
+  
+  // Set up new interval
+  keepaliveInterval = setInterval(() => {
+    try {
+      // Send keepalive to all channels
+      for (const [channelId, channelSockets] of connections.entries()) {
+        if (channelSockets.size === 0) continue;
+        
+        const message = JSON.stringify({
+          type: "keepalive",
+          timestamp: new Date().toISOString()
+        });
+        
+        let activeCount = 0;
+        
+        for (const socket of channelSockets) {
+          try {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(message);
+              activeCount++;
+            } else if (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+              channelSockets.delete(socket);
+            }
+          } catch (err) {
+            console.error(`Error sending keepalive to socket in channel ${channelId}:`, err);
+            channelSockets.delete(socket);
+          }
+        }
+        
+        console.log(`Sent keepalive to ${activeCount} clients in channel ${channelId}`);
+        
+        // Remove channel if no active sockets
+        if (channelSockets.size === 0) {
+          connections.delete(channelId);
+          console.log(`Removed empty channel: ${channelId}`);
+        }
+      }
+    } catch (err) {
+      console.error("Error in keepalive routine:", err);
+    }
+  }, KEEPALIVE_INTERVAL);
+  
+  console.log("Keepalive interval started");
+}
+
+// Start the initial keepalive
+startKeepAlive();
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -157,23 +255,6 @@ serve(async (req) => {
     console.error("Error sending welcome message:", error);
   }
 
-  // Set up a ping interval to keep the connection alive
-  const pingInterval = setInterval(() => {
-    try {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-          type: "keepalive",
-          timestamp: new Date().toISOString()
-        }));
-      } else {
-        clearInterval(pingInterval);
-      }
-    } catch (err) {
-      console.error("Error during keepalive ping:", err);
-      clearInterval(pingInterval);
-    }
-  }, 45000); // Every 45 seconds
-
   // Handle messages from clients
   socket.onmessage = async (event) => {
     try {
@@ -183,11 +264,25 @@ serve(async (req) => {
       // Handle different message types
       if (data.type === "donation") {
         console.log(`Broadcasting donation in channel ${channelId}`);
-        // Send immediately to this client and broadcast to others
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify(data));
+        
+        // Add a unique server-side ID if missing an ID
+        if (data.donation && !data.donation.id && !data.donation.clientId) {
+          data.donation.clientId = `server-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         }
-        broadcastToChannel(channelId, data);
+        
+        // Send immediately to this client and broadcast to others
+        try {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(data));
+          }
+        } catch (err) {
+          console.error("Error sending donation confirmation to source client:", err);
+        }
+        
+        // Wait a moment to ensure the original client got their copy, then broadcast to others
+        setTimeout(() => {
+          broadcastToChannel(channelId, data);
+        }, 100);
       } else if (data.type === "ping") {
         console.log(`Ping received from channel ${channelId}`);
         if (socket.readyState === WebSocket.OPEN) {
@@ -205,6 +300,9 @@ serve(async (req) => {
             timestamp: new Date().toISOString()
           }));
         }
+      } else if (data.type === "pong") {
+        // Just log the pong response
+        console.log(`Pong received from channel ${channelId}`);
       }
     } catch (error) {
       console.error("Error processing message:", error);
@@ -226,7 +324,6 @@ serve(async (req) => {
   // Handle client disconnection
   socket.onclose = () => {
     console.log(`Client disconnected from channel ${channelId}`);
-    clearInterval(pingInterval);
     
     // Remove this connection from tracking
     channelConnections.delete(socket);
@@ -243,7 +340,6 @@ serve(async (req) => {
   // Handle errors
   socket.onerror = (error) => {
     console.error(`WebSocket error in channel ${channelId}:`, error);
-    clearInterval(pingInterval);
   };
 
   return response;

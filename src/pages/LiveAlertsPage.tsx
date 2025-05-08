@@ -83,11 +83,29 @@ const LiveAlertsPage = () => {
         
         console.log(`Setting up WebSocket for channel: ${targetChannel}, mode: ${isOBSMode ? "OBS" : "dashboard"}`);
         
-        // Create WebSocket connection
-        const socket = await createAlertWebSocket(
-          targetChannel,
-          isOBSMode ? "consumer" : "producer"
-        );
+        // Create WebSocket connection with more aggressive retries
+        let retryCount = 0;
+        const maxRetries = 5;
+        let socket;
+        
+        while (retryCount < maxRetries) {
+          try {
+            socket = await createAlertWebSocket(
+              targetChannel,
+              isOBSMode ? "consumer" : "producer"
+            );
+            break; // If we get here, connection succeeded
+          } catch (err) {
+            retryCount++;
+            console.log(`WebSocket connection attempt ${retryCount} failed, retrying...`);
+            if (retryCount >= maxRetries) throw err;
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second between retries
+          }
+        }
+        
+        if (!socket) {
+          throw new Error("Failed to establish WebSocket connection after multiple attempts");
+        }
         
         wsRef.current = socket;
         setConnected(true);
@@ -97,7 +115,7 @@ const LiveAlertsPage = () => {
           toast.success("Connected to alert system");
         }
         
-        // Handle messages from the server
+        // Handle messages from the server with improved error handling
         socket.onmessage = (event) => {
           try {
             console.log("WebSocket message received:", event.data);
@@ -106,6 +124,19 @@ const LiveAlertsPage = () => {
             if (data.type === "donation") {
               const newDonation = data.donation as Donation;
               console.log("Processing donation from WebSocket:", newDonation);
+              
+              // Add more validation to prevent errors
+              if (!newDonation) {
+                console.error("Invalid donation data received:", data);
+                return;
+              }
+              
+              // Ensure we have minimum required fields
+              if (!newDonation.donor_name || !newDonation.amount) {
+                console.error("Donation missing required fields:", newDonation);
+                return;
+              }
+              
               handleNewDonation(newDonation);
             } else if (data.type === "welcome") {
               console.log("Welcome message received:", data.message);
@@ -120,13 +151,16 @@ const LiveAlertsPage = () => {
                   timestamp: new Date().toISOString()
                 }));
               }
+            } else if (data.type === "error") {
+              console.error("Error from WebSocket server:", data.message);
+              toast.error(`Server error: ${data.message}`);
             }
           } catch (error) {
             console.error("Error parsing WebSocket message:", error);
           }
         };
         
-        // Handle connection closure
+        // Handle connection closure with faster reconnection
         socket.onclose = (event) => {
           console.log("WebSocket disconnected:", event.code, event.reason);
           setConnected(false);
@@ -136,11 +170,11 @@ const LiveAlertsPage = () => {
               toast.error("Disconnected from alert system. Reconnecting...");
             }
             
-            // Attempt to reconnect after a delay
+            // Attempt to reconnect after a shorter delay
             wsReconnectTimeoutRef.current = window.setTimeout(() => {
               console.log("Attempting to reconnect...");
               setupWebSocket();
-            }, 3000);
+            }, 2000); // Reduce to 2 seconds for faster reconnection
           }
         };
         
@@ -187,7 +221,7 @@ const LiveAlertsPage = () => {
     };
   }, [isOBSMode, channelId, user?.id]);
 
-  // Handle a new donation alert
+  // Handle a new donation alert with improved deduplication
   const handleNewDonation = (newDonation: Donation) => {
     console.log("Handling new donation:", newDonation);
     
@@ -198,12 +232,21 @@ const LiveAlertsPage = () => {
       newDonation.clientId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
     
-    // Add to alerts list, ensuring no duplicates
+    // Add to alerts list, ensuring no duplicates with more robust checks
     setAlerts(prevAlerts => {
-      // Check if this donation already exists
+      // Check if this donation already exists using multiple criteria
       const exists = prevAlerts.some(d => 
+        // Check by ID
         (d.id && d.id === newDonation.id) || 
-        (d.payment_id && d.payment_id === newDonation.payment_id)
+        // Check by payment_id
+        (d.payment_id && d.payment_id === newDonation.payment_id) ||
+        // Check by client ID
+        (d.clientId && d.clientId === newDonation.clientId) ||
+        // Check by similar timestamps and same amount/donor
+        (d.created_at && newDonation.created_at && 
+         d.amount === newDonation.amount && 
+         d.donor_name === newDonation.donor_name &&
+         Math.abs(new Date(d.created_at).getTime() - new Date(newDonation.created_at).getTime()) < 5000)
       );
       
       if (exists) {
@@ -350,7 +393,7 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // Function to manually reconnect WebSocket
+  // Function to manually reconnect WebSocket with improved reliability
   const handleReconnect = () => {
     if (wsRef.current) {
       console.log("Manually closing WebSocket for reconnection");
@@ -369,10 +412,13 @@ const LiveAlertsPage = () => {
       const targetChannel = isOBSMode && channelId ? channelId : user?.id;
       if (targetChannel) {
         console.log("Manually reconnecting WebSocket");
+        setIsConnecting(true);
+        
         createAlertWebSocket(targetChannel, isOBSMode ? "consumer" : "producer")
           .then(socket => {
             wsRef.current = socket;
             setConnected(true);
+            setIsConnecting(false);
             toast.success("Reconnected to alert system");
             
             // Send a test ping
@@ -383,7 +429,8 @@ const LiveAlertsPage = () => {
           })
           .catch(err => {
             console.error("Error during manual reconnection:", err);
-            toast.error("Failed to reconnect");
+            setIsConnecting(false);
+            toast.error("Failed to reconnect, please try again");
           });
       }
     }, 500);
