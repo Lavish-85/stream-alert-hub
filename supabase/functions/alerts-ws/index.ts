@@ -1,3 +1,4 @@
+
 // WebSocket server for donation alerts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,25 +16,41 @@ const connections = new Map<string, Set<WebSocket>>();
 // Helper to broadcast alerts to a specific channel
 function broadcastToChannel(channelId: string, data: any) {
   const channelConnections = connections.get(channelId);
-  if (!channelConnections) return;
+  if (!channelConnections) {
+    console.log(`No connections found for channel ${channelId}`);
+    return;
+  }
   
   const message = JSON.stringify(data);
   console.log(`Broadcasting to ${channelConnections.size} clients in channel ${channelId}`);
+  
+  let successCount = 0;
+  let failCount = 0;
   
   channelConnections.forEach(socket => {
     try {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(message);
+        successCount++;
+      } else {
+        console.log(`Skipping socket with readyState: ${socket.readyState}`);
+        failCount++;
       }
     } catch (err) {
       console.error("Error sending to socket:", err);
+      failCount++;
     }
   });
+  
+  console.log(`Broadcast complete: ${successCount} successful, ${failCount} failed`);
 }
 
 // Helper to validate a user ID is legitimate
 async function validateUserId(userId: string): Promise<boolean> {
-  if (!userId || userId.length < 10) return false;
+  if (!userId || userId.length < 10) {
+    console.log(`Invalid userId format: ${userId}`);
+    return false;
+  }
   
   try {
     const supabaseAdmin = createClient(
@@ -43,6 +60,7 @@ async function validateUserId(userId: string): Promise<boolean> {
     );
 
     // Check if user exists
+    console.log(`Validating userId: ${userId}`);
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -54,6 +72,7 @@ async function validateUserId(userId: string): Promise<boolean> {
       return false;
     }
     
+    console.log(`User validation successful for: ${userId}`);
     return true;
   } catch (error) {
     console.error("Error validating user:", error);
@@ -81,19 +100,32 @@ serve(async (req) => {
   const channelId = url.searchParams.get("channel");
   const mode = url.searchParams.get("mode") || "consumer"; // consumer or producer
   
+  console.log(`Connection request for channel ${channelId}, mode: ${mode}`);
+  
   if (!channelId) {
+    console.log("Request rejected: Missing channel parameter");
     return new Response("Missing channel parameter", { 
       status: 400, 
       headers: corsHeaders 
     });
   }
   
-  // For consumer mode (OBS), we don't need to validate (keep it simple)
-  // For producer mode (dashboard), validate to secure the connection
-  if (mode === "producer") {
+  // For consumer mode (OBS), we validate but with simplified auth
+  if (mode === "consumer") {
+    // For consumer mode, verify the channel exists
+    const isValid = await validateUserId(channelId);
+    if (!isValid) {
+      console.log(`Request rejected: Invalid channel ${channelId}`);
+      return new Response("Invalid channel", { 
+        status: 400, 
+        headers: corsHeaders 
+      });
+    }
+  } else if (mode === "producer") {
     // Extract token from Authorization header
     const authHeader = req.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("Request rejected: Missing or invalid authorization header");
       return new Response("Unauthorized", { 
         status: 401, 
         headers: corsHeaders 
@@ -140,15 +172,6 @@ serve(async (req) => {
         headers: corsHeaders 
       });
     }
-  } else {
-    // For consumer mode, verify the channel exists
-    const isValid = await validateUserId(channelId);
-    if (!isValid) {
-      return new Response("Invalid channel", { 
-        status: 400, 
-        headers: corsHeaders 
-      });
-    }
   }
 
   // Set up websocket connection
@@ -165,21 +188,36 @@ serve(async (req) => {
   
   console.log(`Client connected to channel ${channelId}, mode: ${mode}`);
   console.log(`Channel now has ${channelConnections.size} connections`);
-
-  // Set up database listener for this user's donations (only for producer mode)
-  if (mode === "producer") {
-    // This happens in the client now
+  
+  // Send welcome message
+  try {
+    socket.send(JSON.stringify({
+      type: "welcome",
+      message: `Connected to channel ${channelId}`
+    }));
+  } catch (error) {
+    console.error("Error sending welcome message:", error);
   }
 
   // Handle messages from clients
   socket.onmessage = async (event) => {
     try {
+      console.log(`Message received in channel ${channelId}:`, event.data);
       const data = JSON.parse(event.data);
       
       // In producer mode, broadcast the message to all consumers
       if (mode === "producer" && data.type === "donation") {
         console.log(`Broadcasting donation from producer in channel ${channelId}`);
         broadcastToChannel(channelId, data);
+      }
+      
+      // Handle hello message (mainly for testing connection)
+      if (data.type === "hello") {
+        console.log(`Hello from ${mode} in channel ${channelId}`);
+        socket.send(JSON.stringify({
+          type: "welcome",
+          message: `Connected to channel ${channelId}`
+        }));
       }
     } catch (error) {
       console.error("Error processing message:", error);

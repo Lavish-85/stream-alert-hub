@@ -37,11 +37,46 @@ export const sendTestAlert = async () => {
       return { error };
     }
 
+    console.log("Test alert sent successfully:", data);
+    
+    // Also try to send via WebSocket directly for immediate feedback
+    try {
+      const wsUrl = getWebSocketUrl(user.id);
+      console.log("Sending test alert via WebSocket to:", wsUrl);
+      
+      // Create temporary WebSocket connection
+      const tempWs = new WebSocket(wsUrl);
+      
+      tempWs.onopen = () => {
+        // Send test donation as a message
+        tempWs.send(JSON.stringify({
+          type: "donation",
+          donation: data
+        }));
+        
+        // Close after sending
+        setTimeout(() => tempWs.close(), 1000);
+      };
+      
+      tempWs.onerror = (err) => {
+        console.error("WebSocket error when sending test:", err);
+      };
+    } catch (wsErr) {
+      console.error("Failed to send test via WebSocket:", wsErr);
+    }
+
     return { data };
   } catch (err) {
     console.error("Exception in sendTestAlert:", err);
     return { error: err };
   }
+};
+
+/**
+ * Gets the WebSocket URL for the alerts system
+ */
+export const getWebSocketUrl = (channelId) => {
+  return `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channelId}&mode=consumer`;
 };
 
 /**

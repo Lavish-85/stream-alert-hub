@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -26,13 +25,14 @@ import {
   XCircle,
   AlertTriangle,
   Wifi,
+  WifiOff,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl, checkUserHasToken } from "@/utils/obsUtils";
+import { sendTestAlert, getOBSUrl, checkUserHasToken, getWebSocketUrl } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -76,8 +76,8 @@ const SetupPage = () => {
         wsRef.close();
       }
       
-      // Create WebSocket connection
-      const wsUrl = `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channelId}&mode=producer`;
+      // Create WebSocket connection using the helper
+      const wsUrl = getWebSocketUrl(channelId);
       console.log("Testing WebSocket connection:", wsUrl);
       
       const socket = new WebSocket(wsUrl);
@@ -87,32 +87,61 @@ const SetupPage = () => {
         console.log("WebSocket connected");
         setWsConnectionStatus("connected");
         
-        // Send authentication token
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) {
-          socket.send(JSON.stringify({ 
-            type: "auth", 
-            token: data.session.access_token 
-          }));
-        }
+        // Send hello message to test connection
+        socket.send(JSON.stringify({ 
+          type: "hello", 
+          channel: channelId,
+          mode: "consumer"
+        }));
         
-        // Close connection after auth test
+        // Keep connection active for testing but close after a while
         setTimeout(() => {
-          socket.close();
-        }, 2000);
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.close();
+          }
+        }, 10000); // Keep open longer for testing
+      };
+      
+      socket.onmessage = (event) => {
+        console.log("WebSocket test message received:", event.data);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "welcome") {
+            toast({
+              title: "WebSocket Connected",
+              description: "Successfully connected to the alert system.",
+            });
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
       };
       
       socket.onclose = () => {
         console.log("WebSocket test connection closed");
+        // Only change status if explicitly disconnected, not on normal close
+        if (wsConnectionStatus === "connecting") {
+          setWsConnectionStatus("disconnected");
+        }
       };
       
       socket.onerror = (error) => {
         console.error("WebSocket test connection error:", error);
         setWsConnectionStatus("disconnected");
+        toast({
+          title: "Connection Error",
+          description: "Could not connect to WebSocket server. Please try again later.",
+          variant: "destructive",
+        });
       };
     } catch (error) {
       console.error("Error testing WebSocket connection:", error);
       setWsConnectionStatus("disconnected");
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to WebSocket server. Please try again later.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -245,6 +274,16 @@ const SetupPage = () => {
                     <Wifi className="h-3 w-3" /> WebSocket Connected
                   </Badge>
                 )}
+                {wsConnectionStatus === "connecting" && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 flex items-center gap-1 border-yellow-200">
+                    <RefreshCw className="h-3 w-3 animate-spin" /> Connecting...
+                  </Badge>
+                )}
+                {wsConnectionStatus === "disconnected" && (
+                  <Badge variant="outline" className="bg-red-50 text-red-700 flex items-center gap-1 border-red-200">
+                    <WifiOff className="h-3 w-3" /> Disconnected
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 Use these to accept payments and display alerts on your stream
@@ -353,6 +392,27 @@ const SetupPage = () => {
                       <li>Click OK to save</li>
                     </ol>
                   </div>
+                  
+                  {wsConnectionStatus !== "connected" && (
+                    <Button 
+                      onClick={() => user && testWebSocketConnection(user.id)}
+                      variant="outline"
+                      className="w-full"
+                      disabled={!user || wsConnectionStatus === "connecting"}
+                    >
+                      {wsConnectionStatus === "connecting" ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Test WebSocket Connection
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </TabsContent>
               </Tabs>
               <Button onClick={handleNextStep}>

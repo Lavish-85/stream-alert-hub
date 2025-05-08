@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff } from "lucide-react";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { sendTestAlert } from "@/utils/obsUtils";
+import { sendTestAlert, getWebSocketUrl } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -91,27 +92,37 @@ const LiveAlertsPage = () => {
         window.clearTimeout(wsReconnectTimeoutRef.current);
       }
       
-      // Get base URL (from current URL)
-      const baseUrl = window.location.origin.replace('http', 'ws');
-      const wsUrl = `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channel}&mode=${mode}`;
+      // Use consistent WebSocket URL format from obsUtils
+      const wsUrl = getWebSocketUrl(channel);
       console.log("Connecting to WebSocket:", wsUrl);
       
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
       
       socket.onopen = () => {
-        console.log("WebSocket connected");
+        console.log("WebSocket connected successfully");
         setConnected(true);
+        
+        // In OBS mode, send a "hello" message to the server
+        if (isOBSMode) {
+          socket.send(JSON.stringify({ 
+            type: "hello", 
+            channel: channel,
+            mode: mode
+          }));
+        }
+        
         toast.success("Connected to alert system");
       };
       
       socket.onmessage = (event) => {
         try {
+          console.log("WebSocket message received:", event.data);
           const data = JSON.parse(event.data);
-          console.log("WebSocket message received:", data);
           
           if (data.type === "donation") {
             const newDonation = data.donation as Donation;
+            console.log("Processing donation from WebSocket:", newDonation);
             handleNewDonation(newDonation);
           }
         } catch (error) {
@@ -160,6 +171,8 @@ const LiveAlertsPage = () => {
 
   // Handle a new donation alert
   const handleNewDonation = (newDonation: Donation) => {
+    console.log("Handling new donation:", newDonation);
+    
     // Add to alerts list
     setAlerts(prevAlerts => [newDonation, ...prevAlerts].slice(0, 20));
     
@@ -274,6 +287,23 @@ const LiveAlertsPage = () => {
         return "animate-fade-in";
     }
   };
+  
+  // Manual test function
+  const handleManualTest = async () => {
+    if (!user) {
+      toast.error("You must be signed in to send test alerts");
+      return;
+    }
+    
+    toast.info("Sending test alert...");
+    const result = await sendTestAlert();
+    
+    if (result.error) {
+      toast.error("Failed to send test alert");
+    } else {
+      toast.success("Test alert sent");
+    }
+  };
 
   // If in OBS mode and no channel ID provided, show error
   if (isOBSMode && !channelId) {
@@ -322,8 +352,14 @@ const LiveAlertsPage = () => {
       }}>
         {/* Connection indicator (only visible when disconnected) */}
         {!connected && (
-          <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full flex items-center text-xs">
+          <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full flex items-center text-xs animate-pulse">
             <WifiOff className="h-3 w-3 mr-1" /> Disconnected
+          </div>
+        )}
+        
+        {connected && (
+          <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-full flex items-center text-xs opacity-70">
+            <Wifi className="h-3 w-3 mr-1" /> Connected
           </div>
         )}
         
@@ -391,6 +427,20 @@ const LiveAlertsPage = () => {
         </div>
       </div>
 
+      <div className="mb-6">
+        <Button 
+          onClick={handleManualTest}
+          variant="default"
+          className="flex items-center gap-2"
+        >
+          <Bell className="h-4 w-4" />
+          Send Test Alert Now
+        </Button>
+        <p className="text-xs text-muted-foreground mt-2">
+          This will trigger an alert in both your dashboard and any connected OBS browser sources
+        </p>
+      </div>
+
       {showOBSInstructions && (
         <Card className="mb-6 bg-muted/50">
           <CardHeader>
@@ -411,7 +461,7 @@ const LiveAlertsPage = () => {
                   onClick={() => {
                     const url = `${window.location.origin}/live-alerts?obs=true&channel=${user?.id}`;
                     navigator.clipboard.writeText(url);
-                    toast("Copied!", {
+                    toast.success("Copied!", {
                       description: "Secure OBS URL copied to clipboard"
                     });
                   }}
@@ -436,43 +486,21 @@ const LiveAlertsPage = () => {
               </ol>
             </div>
             
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
-              <h3 className="font-medium mb-1">New WebSocket Connection</h3>
-              <p className="text-sm">
-                This updated system uses WebSockets for a more reliable connection. If you were using the previous version,
-                please update your OBS browser source with the new URL above.
-              </p>
-            </div>
-            
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
-              <h3 className="font-medium mb-1">Current Alert Style</h3>
-              <p className="text-sm">
-                {activeStyle ? (
-                  <>Using "{activeStyle.name}" style for alerts - customize in the Alerts page</>
-                ) : (
-                  <>No alert style selected. Visit the Alerts page to choose and customize one.</>
-                )}
-              </p>
-            </div>
-            
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
               <div className="flex items-start space-x-2">
                 <RefreshCw className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div>
-                  <h3 className="font-medium text-blue-800">Test the Connection</h3>
+                  <h3 className="font-medium text-blue-800">Troubleshooting</h3>
                   <p className="text-sm text-blue-600 mb-2">
-                    Send a test alert to verify your OBS setup is working correctly.
+                    If alerts aren't showing up in your OBS browser source:
                   </p>
-                  <button
-                    onClick={async () => {
-                      await sendTestAlert();
-                      toast.success("Test alert sent!");
-                    }}
-                    className="text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md"
-                    disabled={!user}
-                  >
-                    Send Test Alert
-                  </button>
+                  <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
+                    <li>Click "Send Test Alert Now" button above to trigger a test alert</li>
+                    <li>In OBS, right-click your browser source and select "Refresh cache of current page"</li>
+                    <li>Make sure "Refresh browser when scene becomes active" is checked</li>
+                    <li>Try completely removing and re-adding the browser source in OBS</li>
+                    <li>Check if your internet connection is stable</li>
+                  </ol>
                 </div>
               </div>
             </div>
@@ -520,7 +548,7 @@ const LiveAlertsPage = () => {
             <CardContent>
               <p className="text-muted-foreground text-base">
                 Donation alerts will appear here as they come in. When someone makes a donation, 
-                you'll see it instantly!
+                you'll see it instantly! Click "Send Test Alert Now" to test the system.
               </p>
             </CardContent>
           </Card>

@@ -161,7 +161,7 @@ gcp_project_id = ""
 gcp_project_number = ""
 gcp_jwt_path = "supabase/gcloud.json"
 
-# Disable for now
+# Make sure our alerts-ws function doesn't require JWT verification
 [functions]
 [functions.alerts-ws]
 verify_jwt = false
