@@ -1,6 +1,12 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
+
+// Extend the WebSocket interface to include our custom properties
+interface ExtendedWebSocket extends WebSocket {
+  pingInterval?: number;
+}
 
 /**
  * Sends a test alert to the OBS browser source
@@ -148,13 +154,13 @@ export const checkUserHasToken = async () => {
  * Creates a WebSocket connection for alerts
  * Returns a promise that resolves when the connection is established
  */
-export const createAlertWebSocket = (channelId: string, mode = "consumer"): Promise<WebSocket> => {
+export const createAlertWebSocket = (channelId: string, mode = "consumer"): Promise<ExtendedWebSocket> => {
   return new Promise((resolve, reject) => {
     try {
       const wsUrl = getWebSocketUrl(channelId);
       console.log(`Creating WebSocket connection to ${wsUrl} (${mode} mode)`);
       
-      const socket = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl) as ExtendedWebSocket;
       let connectionTimeout = setTimeout(() => {
         console.error("WebSocket connection timeout");
         socket.close();

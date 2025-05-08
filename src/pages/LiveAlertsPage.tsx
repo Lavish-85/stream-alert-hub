@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { sendTestAlert, getWebSocketUrl, createAlertWebSocket, testWebSocketConnection } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
+// Add clientId as an optional property to handle the temporary IDs
 interface Donation {
   id: number;
   payment_id: string;
@@ -20,6 +21,7 @@ interface Donation {
   message: string | null;
   created_at: string;
   user_id: string | null;
+  clientId?: string; // Add optional clientId for client-side tracking
 }
 
 const LiveAlertsPage = () => {
@@ -192,7 +194,7 @@ const LiveAlertsPage = () => {
     // Generate a unique key if not available
     if (!newDonation.id) {
       console.log("Donation missing ID, generating one");
-      // @ts-ignore - adding clientId for uniqueness
+      // Now TypeScript knows clientId is a valid property
       newDonation.clientId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
     
