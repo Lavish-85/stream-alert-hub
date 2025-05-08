@@ -111,67 +111,13 @@ serve(async (req) => {
   }
   
   // For consumer mode (OBS), we validate but with simplified auth
-  if (mode === "consumer") {
-    // For consumer mode, verify the channel exists
-    const isValid = await validateUserId(channelId);
-    if (!isValid) {
-      console.log(`Request rejected: Invalid channel ${channelId}`);
-      return new Response("Invalid channel", { 
-        status: 400, 
-        headers: corsHeaders 
-      });
-    }
-  } else if (mode === "producer") {
-    // Extract token from Authorization header
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("Request rejected: Missing or invalid authorization header");
-      return new Response("Unauthorized", { 
-        status: 401, 
-        headers: corsHeaders 
-      });
-    }
-
-    // Verify the JWT token using Supabase
-    try {
-      const token = authHeader.replace("Bearer ", "");
-      const supabaseClient = createClient(
-        Deno.env.get("SUPABASE_URL") || "",
-        Deno.env.get("SUPABASE_ANON_KEY") || "",
-        { 
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false
-          } 
-        }
-      );
-      
-      // Verify JWT token
-      const { data: { user }, error } = await supabaseClient.auth.getUser(token);
-      
-      if (error || !user) {
-        console.error("Authentication failed:", error);
-        return new Response("Unauthorized", { 
-          status: 401, 
-          headers: corsHeaders 
-        });
-      }
-      
-      // Ensure the token owner is trying to access their own channel
-      if (user.id !== channelId) {
-        console.error("Channel ID mismatch with authenticated user");
-        return new Response("Forbidden", { 
-          status: 403, 
-          headers: corsHeaders 
-        });
-      }
-    } catch (err) {
-      console.error("Auth error:", err);
-      return new Response("Authentication error", { 
-        status: 500, 
-        headers: corsHeaders 
-      });
-    }
+  const isValid = await validateUserId(channelId);
+  if (!isValid) {
+    console.log(`Request rejected: Invalid channel ${channelId}`);
+    return new Response("Invalid channel", { 
+      status: 400, 
+      headers: corsHeaders 
+    });
   }
 
   // Set up websocket connection
@@ -205,14 +151,17 @@ serve(async (req) => {
       console.log(`Message received in channel ${channelId}:`, event.data);
       const data = JSON.parse(event.data);
       
-      // In producer mode, broadcast the message to all consumers
-      if (mode === "producer" && data.type === "donation") {
-        console.log(`Broadcasting donation from producer in channel ${channelId}`);
+      // Handle different message types
+      if (data.type === "donation") {
+        console.log(`Broadcasting donation in channel ${channelId}`);
         broadcastToChannel(channelId, data);
-      }
-      
-      // Handle hello message (mainly for testing connection)
-      if (data.type === "hello") {
+      } else if (data.type === "ping") {
+        console.log(`Ping received from channel ${channelId}`);
+        socket.send(JSON.stringify({
+          type: "pong",
+          timestamp: new Date().toISOString()
+        }));
+      } else if (data.type === "hello") {
         console.log(`Hello from ${mode} in channel ${channelId}`);
         socket.send(JSON.stringify({
           type: "welcome",

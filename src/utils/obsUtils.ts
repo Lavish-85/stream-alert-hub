@@ -1,6 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
+import { toast } from "sonner";
 
 /**
  * Sends a test alert to the OBS browser source
@@ -54,15 +55,19 @@ export const sendTestAlert = async () => {
           donation: data
         }));
         
+        toast.success("Test alert sent via WebSocket");
+        
         // Close after sending
         setTimeout(() => tempWs.close(), 1000);
       };
       
       tempWs.onerror = (err) => {
         console.error("WebSocket error when sending test:", err);
+        toast.error("Failed to connect to WebSocket server");
       };
     } catch (wsErr) {
       console.error("Failed to send test via WebSocket:", wsErr);
+      toast.error("Failed to initialize WebSocket connection");
     }
 
     return { data };
@@ -137,5 +142,86 @@ export const checkUserHasToken = async () => {
   } catch (err) {
     console.error("Exception in checkUserProfile:", err);
     return { hasToken: false, error: err };
+  }
+};
+
+/**
+ * Creates a WebSocket connection for alerts
+ * Returns a promise that resolves when the connection is established
+ */
+export const createAlertWebSocket = (channelId, mode = "consumer") => {
+  return new Promise((resolve, reject) => {
+    try {
+      const wsUrl = getWebSocketUrl(channelId);
+      console.log(`Creating WebSocket connection to ${wsUrl} (${mode} mode)`);
+      
+      const socket = new WebSocket(wsUrl);
+      let connectionTimeout = setTimeout(() => {
+        console.error("WebSocket connection timeout");
+        socket.close();
+        reject(new Error("Connection timeout"));
+      }, 10000);
+      
+      socket.onopen = () => {
+        clearTimeout(connectionTimeout);
+        console.log("WebSocket connected successfully");
+        
+        // In OBS mode, send a "hello" message to the server
+        socket.send(JSON.stringify({ 
+          type: "hello", 
+          channel: channelId,
+          mode: mode
+        }));
+        
+        resolve(socket);
+      };
+      
+      socket.onerror = (err) => {
+        clearTimeout(connectionTimeout);
+        console.error("WebSocket error:", err);
+        reject(err);
+      };
+      
+      socket.onclose = (event) => {
+        clearTimeout(connectionTimeout);
+        console.log("WebSocket closed:", event.code, event.reason);
+        if (!event.wasClean) {
+          reject(new Error(`Connection closed unexpectedly: ${event.code}`));
+        }
+      };
+      
+    } catch (error) {
+      console.error("Error setting up WebSocket:", error);
+      reject(error);
+    }
+  });
+};
+
+/**
+ * Tests if the WebSocket connection works
+ * Returns a promise that resolves to true if a connection can be established
+ */
+export const testWebSocketConnection = async (channelId) => {
+  try {
+    const socket = await createAlertWebSocket(channelId);
+    
+    // Give the server a moment to process the hello message
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Send a test message
+    socket.send(JSON.stringify({
+      type: "ping",
+      timestamp: new Date().toISOString()
+    }));
+    
+    // Wait for a bit to ensure messages are processed
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Close the connection
+    socket.close();
+    return true;
+  } catch (error) {
+    console.error("WebSocket test failed:", error);
+    return false;
   }
 };

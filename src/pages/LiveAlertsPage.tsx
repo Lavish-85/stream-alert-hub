@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { sendTestAlert, getWebSocketUrl } from "@/utils/obsUtils";
+import { sendTestAlert, getWebSocketUrl, createAlertWebSocket, testWebSocketConnection } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
 interface Donation {
@@ -28,6 +28,7 @@ const LiveAlertsPage = () => {
   const [connected, setConnected] = useState(false);
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const { activeStyle, isLoading: styleLoading } = useAlertStyle();
   const { user } = useAuth();
   
@@ -56,19 +57,114 @@ const LiveAlertsPage = () => {
 
   // WebSocket setup for OBS alerts
   useEffect(() => {
-    if (isOBSMode && channelId) {
-      console.log("OBS Mode: Setting up WebSocket connection for channel:", channelId);
-      connectWebSocket(channelId, "consumer");
-    } else if (user?.id) {
-      // For the dashboard, connect as a producer
-      console.log("Producer Mode: Setting up WebSocket connection for user:", user.id);
-      connectWebSocket(user.id, "producer");
+    async function setupWebSocket() {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log("WebSocket already connected");
+        return;
+      }
+      
+      setIsConnecting(true);
+      setConnected(false);
+      
+      try {
+        // Clear any pending reconnect timeouts
+        if (wsReconnectTimeoutRef.current !== null) {
+          window.clearTimeout(wsReconnectTimeoutRef.current);
+        }
+        
+        const targetChannel = isOBSMode && channelId ? channelId : user?.id;
+        if (!targetChannel) {
+          console.log("No channel ID available, skipping WebSocket setup");
+          setIsConnecting(false);
+          return;
+        }
+        
+        console.log(`Setting up WebSocket for channel: ${targetChannel}, mode: ${isOBSMode ? "OBS" : "dashboard"}`);
+        
+        // Create WebSocket connection
+        const socket = await createAlertWebSocket(
+          targetChannel,
+          isOBSMode ? "consumer" : "producer"
+        );
+        
+        wsRef.current = socket;
+        setConnected(true);
+        setIsConnecting(false);
+        
+        if (!isOBSMode) {
+          toast.success("Connected to alert system");
+        }
+        
+        // Handle messages from the server
+        socket.onmessage = (event) => {
+          try {
+            console.log("WebSocket message received:", event.data);
+            const data = JSON.parse(event.data);
+            
+            if (data.type === "donation") {
+              const newDonation = data.donation as Donation;
+              console.log("Processing donation from WebSocket:", newDonation);
+              handleNewDonation(newDonation);
+            } else if (data.type === "welcome") {
+              console.log("Welcome message received:", data.message);
+            } else if (data.type === "pong") {
+              console.log("Pong received:", data);
+            }
+          } catch (error) {
+            console.error("Error parsing WebSocket message:", error);
+          }
+        };
+        
+        // Handle connection closure
+        socket.onclose = (event) => {
+          console.log("WebSocket disconnected:", event.code, event.reason);
+          setConnected(false);
+          
+          if (!event.wasClean) {
+            if (!isOBSMode) {
+              toast.error("Disconnected from alert system. Reconnecting...");
+            }
+            
+            // Attempt to reconnect after a delay
+            wsReconnectTimeoutRef.current = window.setTimeout(() => {
+              console.log("Attempting to reconnect...");
+              setupWebSocket();
+            }, 5000);
+          }
+        };
+        
+        // Handle errors
+        socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          setConnected(false);
+          if (!isOBSMode) {
+            toast.error("Connection error. Will attempt to reconnect.");
+          }
+        };
+      } catch (error) {
+        console.error("Error during WebSocket setup:", error);
+        setConnected(false);
+        setIsConnecting(false);
+        
+        if (!isOBSMode) {
+          toast.error("Failed to connect to alert system. Will retry...");
+        }
+        
+        // Attempt to reconnect after a delay
+        wsReconnectTimeoutRef.current = window.setTimeout(() => {
+          console.log("Attempting to reconnect after error...");
+          setupWebSocket();
+        }, 5000);
+      }
     }
     
+    setupWebSocket();
+    
+    // Return cleanup function
     return () => {
       // Clean up WebSocket connection on unmount
       if (wsRef.current) {
-        console.log("Closing WebSocket connection");
+        console.log("Cleaning up WebSocket connection");
         wsRef.current.close();
       }
       
@@ -78,96 +174,6 @@ const LiveAlertsPage = () => {
       }
     };
   }, [isOBSMode, channelId, user?.id]);
-
-  // Connect to the WebSocket server
-  const connectWebSocket = (channel: string, mode: "producer" | "consumer") => {
-    try {
-      // Close existing connection if any
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      
-      // Clear any pending reconnect timeouts
-      if (wsReconnectTimeoutRef.current !== null) {
-        window.clearTimeout(wsReconnectTimeoutRef.current);
-      }
-      
-      // Use consistent WebSocket URL format from obsUtils
-      const wsUrl = getWebSocketUrl(channel);
-      console.log("Connecting to WebSocket:", wsUrl);
-      
-      const socket = new WebSocket(wsUrl);
-      wsRef.current = socket;
-      
-      socket.onopen = () => {
-        console.log("WebSocket connected successfully");
-        setConnected(true);
-        
-        // In OBS mode, send a "hello" message to the server
-        if (isOBSMode) {
-          socket.send(JSON.stringify({ 
-            type: "hello", 
-            channel: channel,
-            mode: mode
-          }));
-        }
-        
-        toast.success("Connected to alert system");
-      };
-      
-      socket.onmessage = (event) => {
-        try {
-          console.log("WebSocket message received:", event.data);
-          const data = JSON.parse(event.data);
-          
-          if (data.type === "donation") {
-            const newDonation = data.donation as Donation;
-            console.log("Processing donation from WebSocket:", newDonation);
-            handleNewDonation(newDonation);
-          }
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
-        }
-      };
-      
-      socket.onclose = (event) => {
-        console.log("WebSocket disconnected:", event.code, event.reason);
-        setConnected(false);
-        
-        if (!event.wasClean) {
-          toast.error("Disconnected from alert system. Reconnecting...");
-          // Attempt to reconnect after a delay
-          wsReconnectTimeoutRef.current = window.setTimeout(() => {
-            console.log("Attempting to reconnect...");
-            connectWebSocket(channel, mode);
-          }, 5000);
-        }
-      };
-      
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setConnected(false);
-        toast.error("Connection error. Will attempt to reconnect.");
-      };
-      
-      // Add authentication for producer mode
-      if (mode === "producer") {
-        // Add event handler to send auth token after connection
-        socket.addEventListener("open", async () => {
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.access_token) {
-            socket.send(JSON.stringify({ 
-              type: "auth", 
-              token: data.session.access_token 
-            }));
-          }
-        });
-      }
-    } catch (error) {
-      console.error("Error setting up WebSocket:", error);
-      setConnected(false);
-    }
-  };
 
   // Handle a new donation alert
   const handleNewDonation = (newDonation: Donation) => {
@@ -217,10 +223,13 @@ const LiveAlertsPage = () => {
           
           // Send to WebSocket for broadcasting to OBS clients
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            console.log("Broadcasting donation to WebSocket");
             wsRef.current.send(JSON.stringify({
               type: "donation",
               donation: newDonation
             }));
+          } else {
+            console.warn("WebSocket not ready, can't broadcast donation");
           }
           
           // Also handle locally
@@ -299,10 +308,36 @@ const LiveAlertsPage = () => {
     const result = await sendTestAlert();
     
     if (result.error) {
-      toast.error("Failed to send test alert");
+      toast.error("Failed to send test alert: " + (result.error.message || "Unknown error"));
     } else {
       toast.success("Test alert sent");
     }
+  };
+
+  // Function to manually reconnect WebSocket
+  const handleReconnect = () => {
+    if (wsRef.current) {
+      console.log("Manually closing WebSocket for reconnection");
+      wsRef.current.close();
+    }
+    
+    // Wait a moment before attempting to reconnect
+    setTimeout(() => {
+      const targetChannel = isOBSMode && channelId ? channelId : user?.id;
+      if (targetChannel) {
+        console.log("Manually reconnecting WebSocket");
+        createAlertWebSocket(targetChannel, isOBSMode ? "consumer" : "producer")
+          .then(socket => {
+            wsRef.current = socket;
+            setConnected(true);
+            toast.success("Reconnected to alert system");
+          })
+          .catch(err => {
+            console.error("Error during manual reconnection:", err);
+            toast.error("Failed to reconnect");
+          });
+      }
+    }, 500);
   };
 
   // If in OBS mode and no channel ID provided, show error
@@ -350,6 +385,19 @@ const LiveAlertsPage = () => {
         overflow: 'hidden',
         position: 'relative'
       }}>
+        {/* Debug info for OBS mode (will be visible in OBS) */}
+        <div className="absolute top-2 left-2 bg-black/50 text-white p-2 text-xs z-50 opacity-50 rounded">
+          {channelId ? `Channel: ${channelId.substring(0, 8)}...` : "No channel"}
+          {" | "}
+          {connected ? (
+            <span className="text-green-400">Connected</span>
+          ) : isConnecting ? (
+            <span className="text-yellow-400">Connecting...</span>
+          ) : (
+            <span className="text-red-400">Disconnected</span>
+          )}
+        </div>
+        
         {/* Connection indicator (only visible when disconnected) */}
         {!connected && (
           <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full flex items-center text-xs animate-pulse">
@@ -411,13 +459,40 @@ const LiveAlertsPage = () => {
           <p className="text-muted-foreground mb-6">Watch donations as they come in real-time</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center mt-2 sm:mt-0">
-          <Badge 
-            variant={connected ? "default" : "destructive"}
-            className="flex items-center gap-1"
-          >
-            {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {connected ? "Connected" : "Disconnected"}
-          </Badge>
+          {isConnecting ? (
+            <Badge 
+              variant="outline"
+              className="flex items-center gap-1 bg-yellow-50 text-yellow-700 border-yellow-300"
+            >
+              <RefreshCw className="h-3 w-3 animate-spin" /> Connecting...
+            </Badge>
+          ) : connected ? (
+            <Badge 
+              variant="default"
+              className="flex items-center gap-1"
+            >
+              <Wifi className="h-3 w-3" /> Connected
+            </Badge>
+          ) : (
+            <Badge 
+              variant="destructive"
+              className="flex items-center gap-1"
+            >
+              <WifiOff className="h-3 w-3" /> Disconnected
+            </Badge>
+          )}
+          
+          {!connected && !isConnecting && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleReconnect}
+              className="flex items-center gap-1"
+            >
+              <RefreshCw className="h-3 w-3" /> Reconnect
+            </Button>
+          )}
+          
           <button
             onClick={() => setShowOBSInstructions(!showOBSInstructions)}
             className="text-sm text-primary hover:underline"
@@ -500,6 +575,7 @@ const LiveAlertsPage = () => {
                     <li>Make sure "Refresh browser when scene becomes active" is checked</li>
                     <li>Try completely removing and re-adding the browser source in OBS</li>
                     <li>Check if your internet connection is stable</li>
+                    <li>Make sure your OBS is updated to the latest version</li>
                   </ol>
                 </div>
               </div>
