@@ -80,7 +80,7 @@ export const sendTestAlert = async () => {
 /**
  * Gets the WebSocket URL for the alerts system
  */
-export const getWebSocketUrl = (channelId) => {
+export const getWebSocketUrl = (channelId: string): string => {
   return `wss://khfhloynxijcagrqqicq.supabase.co/functions/v1/alerts-ws?channel=${channelId}&mode=consumer`;
 };
 
@@ -149,7 +149,7 @@ export const checkUserHasToken = async () => {
  * Creates a WebSocket connection for alerts
  * Returns a promise that resolves when the connection is established
  */
-export const createAlertWebSocket = (channelId, mode = "consumer") => {
+export const createAlertWebSocket = (channelId: string, mode = "consumer"): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
     try {
       const wsUrl = getWebSocketUrl(channelId);
@@ -201,7 +201,7 @@ export const createAlertWebSocket = (channelId, mode = "consumer") => {
  * Tests if the WebSocket connection works
  * Returns a promise that resolves to true if a connection can be established
  */
-export const testWebSocketConnection = async (channelId) => {
+export const testWebSocketConnection = async (channelId: string): Promise<boolean> => {
   try {
     const socket = await createAlertWebSocket(channelId);
     

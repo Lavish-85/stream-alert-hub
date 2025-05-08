@@ -413,6 +413,7 @@ const LiveAlertsPage = () => {
         
         {lastAlert && (
           <div 
+            key={lastAlert.id || Math.random()}
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
             style={{
               fontFamily: alertStyle.font_family || "inherit"
@@ -589,7 +590,7 @@ const LiveAlertsPage = () => {
         {alerts.length > 0 ? (
           alerts.map((donation) => (
             <Alert 
-              key={donation.id}
+              key={donation.id || donation.payment_id}
               className={cn(
                 "transition-all duration-500 p-6",
                 lastAlert?.id === donation.id ? "border-brand-600 bg-brand-50/30 animate-pulse" : "",
