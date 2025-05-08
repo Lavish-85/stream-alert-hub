@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTestAlert, getOBSUrl, checkUserHasToken, regenerateOBSToken } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SetupPage = () => {
   const { toast } = useToast();
@@ -45,6 +47,7 @@ const SetupPage = () => {
   const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
   const [hasExistingToken, setHasExistingToken] = useState(false);
   const [tokenGenerationRetries, setTokenGenerationRetries] = useState(0);
+  const [regenerationStatus, setRegenerationStatus] = useState<"idle" | "success" | "error">("idle");
   const MAX_RETRIES = 2;
   
   // Enhanced token check and OBS URL generation with retries
@@ -218,15 +221,18 @@ const SetupPage = () => {
   // Direct function for token regeneration with enhanced feedback
   const handleForceTokenRegeneration = async () => {
     setIsGeneratingUrl(true);
+    setRegenerationStatus("idle");
+    
     try {
       // First directly regenerate the token
       const { token, error } = await regenerateOBSToken();
       
       if (error || !token) {
         console.error("Error during forced token regeneration:", error);
+        setRegenerationStatus("error");
         toast({
           title: "Token Regeneration Failed",
-          description: "Could not create new token. Please try again or contact support.",
+          description: "Could not create new token. Please try again later.",
           variant: "destructive",
         });
         return;
@@ -240,6 +246,7 @@ const SetupPage = () => {
       
       setObsUrl(url);
       setHasExistingToken(true);
+      setRegenerationStatus("success");
       
       toast({
         title: "Token Successfully Regenerated",
@@ -248,6 +255,7 @@ const SetupPage = () => {
       
     } catch (error) {
       console.error("Exception during forced token regeneration:", error);
+      setRegenerationStatus("error");
       toast({
         title: "Unexpected Error",
         description: "Please try again or contact support if the issue persists.",
@@ -415,6 +423,27 @@ const SetupPage = () => {
                       <li>If you see authentication errors, use the "Regenerate New Token" button below</li>
                     </ul>
                   </div>
+
+                  {/* Show success/error alerts for token regeneration */}
+                  {regenerationStatus === "success" && (
+                    <Alert variant="default" className="bg-green-50 border-green-200">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <AlertTitle className="text-green-800">Token Regenerated Successfully</AlertTitle>
+                      <AlertDescription className="text-green-700">
+                        Your OBS token has been updated. Copy the new URL above and update it in your OBS browser source.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  {regenerationStatus === "error" && (
+                    <Alert variant="destructive">
+                      <XCircle className="h-5 w-5" />
+                      <AlertTitle>Regeneration Failed</AlertTitle>
+                      <AlertDescription>
+                        Could not regenerate token. Please try again in a few moments.
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   {/* Enhanced token regeneration section */}
                   <div className="p-4 bg-rose-50 border border-rose-200 rounded-md">

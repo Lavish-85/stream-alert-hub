@@ -182,6 +182,7 @@ export const validateOBSToken = async (token: string) => {
 
 /**
  * Regenerates a new OBS token for the current user, invalidating any previous ones
+ * Fixed to properly handle existing tokens
  */
 export const regenerateOBSToken = async () => {
   try {
@@ -198,31 +199,43 @@ export const regenerateOBSToken = async () => {
     // Generate a new secure token
     const newToken = uuidv4();
     
-    // First delete any existing tokens for this user
-    // Note: We're explicitly using delete and insert instead of upsert to avoid potential issues
-    const { error: deleteError } = await supabase
+    // First check if a token already exists
+    const { data: existingToken } = await supabase
       .from('obs_tokens')
-      .delete()
-      .eq('user_id', user.id);
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
     
-    if (deleteError) {
-      console.error("Error deleting existing tokens:", deleteError);
-      return { error: deleteError };
-    }
-    
-    // Create a new token AFTER confirming deletion was successful
-    const { error: insertError } = await supabase
-      .from('obs_tokens')
-      .insert({
-        user_id: user.id,
-        token: newToken,
-        created_at: new Date().toISOString(),
-        last_used_at: new Date().toISOString()
-      });
-    
-    if (insertError) {
-      console.error("Error creating regenerated OBS token:", insertError);
-      return { error: insertError };
+    if (existingToken) {
+      // Update the existing token record instead of trying to insert a new one
+      const { error: updateError } = await supabase
+        .from('obs_tokens')
+        .update({
+          token: newToken,
+          created_at: new Date().toISOString(),
+          last_used_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+      
+      if (updateError) {
+        console.error("Error updating token:", updateError);
+        return { error: updateError };
+      }
+    } else {
+      // No token exists, create a new one
+      const { error: insertError } = await supabase
+        .from('obs_tokens')
+        .insert({
+          user_id: user.id,
+          token: newToken,
+          created_at: new Date().toISOString(),
+          last_used_at: new Date().toISOString()
+        });
+      
+      if (insertError) {
+        console.error("Error creating token:", insertError);
+        return { error: insertError };
+      }
     }
     
     console.log("Successfully regenerated OBS token");
