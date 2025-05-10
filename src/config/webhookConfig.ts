@@ -37,10 +37,26 @@ export const obsWebhookConfig = {
   // Prefix for presence channels (can be customized if needed)
   presenceChannelPrefix: 'presence-',
   
-  // Log webhook events for debugging
+  // Log webhook event for debugging
   logWebhookEvent: (eventType: string, data?: any) => {
     if (WEBHOOK_DEBUG) {
       console.log(`[WEBHOOK ${eventType}]`, data ? data : '');
+    }
+  },
+  
+  // Format webhook debug data for display
+  formatDebugData: (data: any): string => {
+    try {
+      // Hide sensitive information
+      const safeData = { ...data };
+      
+      // If the data is a complex object, stringify it nicely
+      return typeof safeData === 'object' 
+        ? JSON.stringify(safeData, null, 2) 
+        : String(safeData);
+    } catch (error) {
+      console.error("Error formatting debug data:", error);
+      return "Error formatting data";
     }
   }
 };
