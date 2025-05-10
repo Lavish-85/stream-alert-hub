@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -388,8 +387,12 @@ const DonationPage = () => {
             </Card>
             
             {/* Recent Donors section */}
-            {recentDonors.length > 0 && (
-              <RecentDonors donors={recentDonors} className="animate-fade-in-delayed" />
+            {channelId && (
+              <RecentDonors 
+                channelId={channelId} 
+                initialDonors={recentDonors} 
+                className="animate-fade-in-delayed" 
+              />
             )}
           </div>
         </div>
