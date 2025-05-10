@@ -1,8 +1,12 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, ReactNode } from 'react';
 import { loadSavedTheme } from '@/lib/utils';
 
-export const ThemeLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface ThemeLoaderProps {
+  children: ReactNode;
+}
+
+export const ThemeLoader: React.FC<ThemeLoaderProps> = ({ children }) => {
   useEffect(() => {
     // Load theme when the component mounts
     loadSavedTheme();
