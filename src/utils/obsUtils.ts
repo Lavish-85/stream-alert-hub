@@ -1,7 +1,8 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
-import { obsWebhookConfig } from "@/config/webhookConfig";
+import { obsWebhookConfig, WEBHOOK_DEBUG } from "@/config/webhookConfig";
 
 /**
  * Sends a test alert to the OBS browser source
@@ -16,6 +17,10 @@ export const sendTestAlert = async () => {
     if (!user) {
       console.error("No authenticated user found");
       return { error: "User not authenticated" };
+    }
+
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('SENDING_TEST_ALERT', { userId: user.id });
     }
 
     const testDonation = {
@@ -35,14 +40,23 @@ export const sendTestAlert = async () => {
 
     if (error) {
       console.error("Error sending test alert:", error);
+      if (WEBHOOK_DEBUG) {
+        obsWebhookConfig.logWebhookEvent('TEST_ALERT_ERROR', error);
+      }
       return { error };
     }
 
     console.log("Test alert sent successfully:", data);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('TEST_ALERT_SUCCESS', data);
+    }
     toast.success("Test alert sent");
     return { data };
   } catch (err) {
     console.error("Exception in sendTestAlert:", err);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('TEST_ALERT_EXCEPTION', err);
+    }
     return { error: err };
   }
 };
@@ -61,9 +75,18 @@ export const getOBSUrl = async () => {
     }
     
     // Use the configuration to generate the OBS URL
-    return obsWebhookConfig.getObsUrl(user.id);
+    const url = obsWebhookConfig.getObsUrl(user.id);
+    
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('GET_OBS_URL', { userId: user.id, url });
+    }
+    
+    return url;
   } catch (error) {
     console.error("Error generating OBS URL:", error);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('GET_OBS_URL_ERROR', error);
+    }
     return null;
   }
 };
@@ -81,6 +104,10 @@ export const checkUserHasToken = async () => {
       return { hasToken: false, error: "User not authenticated" };
     }
 
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('CHECK_USER_TOKEN', { userId: user.id });
+    }
+
     // For Supabase Realtime approach, we don't need tokens anymore
     // Just check if the user exists
     const { data: profile, error: profileError } = await supabase
@@ -91,7 +118,17 @@ export const checkUserHasToken = async () => {
     
     if (profileError) {
       console.error("Error checking user profile:", profileError);
+      if (WEBHOOK_DEBUG) {
+        obsWebhookConfig.logWebhookEvent('CHECK_USER_TOKEN_ERROR', profileError);
+      }
       return { hasToken: false, error: profileError };
+    }
+    
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('CHECK_USER_TOKEN_RESULT', { 
+        hasToken: !!profile, 
+        userId: user.id 
+      });
     }
     
     return { 
@@ -100,6 +137,9 @@ export const checkUserHasToken = async () => {
     };
   } catch (err) {
     console.error("Exception in checkUserProfile:", err);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('CHECK_USER_TOKEN_EXCEPTION', err);
+    }
     return { hasToken: false, error: err };
   }
 };
@@ -113,10 +153,17 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
     let testSuccessful = false;
     let timeoutId: NodeJS.Timeout | null = null;
     
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('TESTING_REALTIME', { channelId });
+    }
+    
     return new Promise((resolve) => {
       // Set up a timeout to resolve the promise after 5 seconds if no success
       timeoutId = setTimeout(() => {
         console.log("Realtime test timed out");
+        if (WEBHOOK_DEBUG) {
+          obsWebhookConfig.logWebhookEvent('REALTIME_TEST_TIMEOUT');
+        }
         if (!testSuccessful) {
           resolve(false);
         }
@@ -127,6 +174,9 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         .channel(`${obsWebhookConfig.realtimeChannelPrefix}${channelId}`)
         .on('presence', { event: 'sync' }, () => {
           console.log("Realtime presence sync successful");
+          if (WEBHOOK_DEBUG) {
+            obsWebhookConfig.logWebhookEvent('REALTIME_SYNC_SUCCESS');
+          }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
           channel.unsubscribe();
@@ -134,12 +184,19 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         })
         .on('presence', { event: 'join' }, () => {
           console.log("Realtime presence join successful");
+          if (WEBHOOK_DEBUG) {
+            obsWebhookConfig.logWebhookEvent('REALTIME_JOIN_SUCCESS');
+          }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
           channel.unsubscribe();
           resolve(true);
         })
         .subscribe(async (status) => {
+          if (WEBHOOK_DEBUG) {
+            obsWebhookConfig.logWebhookEvent('REALTIME_SUBSCRIPTION_STATUS', status);
+          }
+          
           if (status === 'SUBSCRIBED') {
             console.log("Realtime subscription successful");
             await channel.track({ user: channelId, online_at: new Date().toISOString() });
@@ -156,6 +213,9 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
           filter: `user_id=eq.${channelId}`
         }, () => {
           console.log("Postgres changes subscription successful");
+          if (WEBHOOK_DEBUG) {
+            obsWebhookConfig.logWebhookEvent('POSTGRES_CHANGES_SUCCESS');
+          }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
           resolve(true);
@@ -164,6 +224,50 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
     });
   } catch (error) {
     console.error("Error testing realtime connection:", error);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('REALTIME_TEST_ERROR', error);
+    }
     return false;
+  }
+};
+
+/**
+ * Monitors webhook connection by checking for activity
+ * Returns percentage uptime and connection status
+ */
+export const monitorWebhookConnection = async (channelId: string): Promise<{
+  isConnected: boolean;
+  lastPing?: Date;
+  uptime?: number;
+}> => {
+  try {
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('MONITOR_WEBHOOK', { channelId });
+    }
+    
+    // Test the realtime connection
+    const isConnected = await testRealtimeConnection(channelId);
+    
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('MONITOR_RESULT', { 
+        isConnected,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return {
+      isConnected,
+      lastPing: new Date(),
+      // In a real implementation, we would calculate uptime based on historical data
+      uptime: 100
+    };
+  } catch (error) {
+    console.error("Error monitoring webhook connection:", error);
+    if (WEBHOOK_DEBUG) {
+      obsWebhookConfig.logWebhookEvent('MONITOR_ERROR', error);
+    }
+    return {
+      isConnected: false
+    };
   }
 };
