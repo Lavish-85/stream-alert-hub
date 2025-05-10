@@ -4,14 +4,14 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff, Bug } from "lucide-react";
+import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { sendTestAlert, getOBSUrl, testRealtimeConnection } from "@/utils/obsUtils";
 import { v4 as uuidv4 } from "uuid";
-import { obsWebhookConfig, WEBHOOK_DEBUG } from "@/config/webhookConfig";
+import { obsWebhookConfig } from "@/config/webhookConfig";
 
 // Define the donation type based on our Supabase schema
 // Add clientId as an optional property to handle the temporary IDs
@@ -32,8 +32,6 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const { activeStyle, isLoading: styleLoading } = useAlertStyle();
   const { user } = useAuth();
   
@@ -48,47 +46,6 @@ const LiveAlertsPage = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const isOBSMode = urlParams.get('obs') === 'true';
   const channelId = urlParams.get('channel');
-  const showDebug = urlParams.get('debug') === 'true';
-  
-  // Set up debug logging
-  useEffect(() => {
-    if (showDebug || WEBHOOK_DEBUG) {
-      setShowDebugPanel(true);
-      
-      // Intercept console logs for our debug panel
-      const originalConsoleLog = console.log;
-      const originalConsoleError = console.error;
-      
-      console.log = (...args) => {
-        originalConsoleLog.apply(console, args);
-        const logMessage = args.map(arg => 
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ');
-        
-        setDebugLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ${logMessage}`, 
-          ...prev.slice(0, 99)
-        ]);
-      };
-      
-      console.error = (...args) => {
-        originalConsoleError.apply(console, args);
-        const logMessage = args.map(arg => 
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ');
-        
-        setDebugLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ERROR: ${logMessage}`, 
-          ...prev.slice(0, 99)
-        ]);
-      };
-      
-      return () => {
-        console.log = originalConsoleLog;
-        console.error = originalConsoleError;
-      };
-    }
-  }, [showDebug]);
   
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -500,11 +457,6 @@ const LiveAlertsPage = () => {
     }, 500);
   };
 
-  // Clear debug logs
-  const clearDebugLogs = () => {
-    setDebugLogs([]);
-  };
-
   // If in OBS mode and channel ID provided, show the OBS view
   if (isOBSMode && channelId) {
     // Get the default style if no activeStyle is set
@@ -526,44 +478,6 @@ const LiveAlertsPage = () => {
         overflow: 'hidden',
         position: 'relative'
       }}>
-        {/* Debug panel for OBS mode */}
-        {showDebugPanel && (
-          <div className="absolute top-0 left-0 bg-black/80 text-white p-4 m-4 rounded-lg z-50 max-w-md max-h-[80vh] overflow-auto">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold">OBS Debug Panel</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={clearDebugLogs}
-                className="text-xs h-6 py-0 px-2"
-              >
-                Clear
-              </Button>
-            </div>
-            
-            <div className="text-xs space-y-1 mb-4">
-              <p>Channel: <span className="font-mono">{channelId}</span></p>
-              <p>Connection: <span className={connected ? "text-green-400" : "text-red-400"}>
-                {connected ? "Connected" : isConnecting ? "Connecting..." : "Disconnected"}
-              </span></p>
-              <p>Active Style: <span className="font-mono">{activeStyle ? activeStyle.name : "None"}</span></p>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold">Debug Logs:</h4>
-              <div className="bg-black/50 p-2 rounded text-xs font-mono h-40 overflow-auto">
-                {debugLogs.length > 0 ? (
-                  debugLogs.map((log, i) => (
-                    <div key={i} className="whitespace-pre-wrap mb-1">{log}</div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 italic">No logs yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Debug info for OBS mode (will be visible in OBS) */}
         <div className="absolute top-2 left-2 bg-black/50 text-white p-2 text-xs z-50 opacity-50 rounded">
           {channelId ? `Channel: ${channelId.substring(0, 8)}...` : "No channel"}
@@ -697,16 +611,6 @@ const LiveAlertsPage = () => {
             </Button>
           )}
           
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDebugPanel(!showDebugPanel)}
-            className="flex items-center gap-1"
-          >
-            <Bug className="h-3 w-3" /> 
-            {showDebugPanel ? "Hide Debug" : "Show Debug"}
-          </Button>
-          
           <button
             onClick={() => setShowOBSInstructions(!showOBSInstructions)}
             className="text-sm text-primary hover:underline"
@@ -715,132 +619,6 @@ const LiveAlertsPage = () => {
           </button>
         </div>
       </div>
-
-      {/* Debug panel */}
-      {showDebugPanel && (
-        <Card className="mb-6 bg-muted/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bug className="h-4 w-4" /> 
-              Webhook Debug Console
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between mb-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleManualTest}
-                className="flex items-center gap-1"
-              >
-                Send Test Alert
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleReconnect}
-                className="flex items-center gap-1"
-                disabled={isConnecting}
-              >
-                {isConnecting ? (
-                  <>
-                    <RefreshCw className="h-3 w-3 animate-spin mr-1" /> 
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-3 w-3 mr-1" /> 
-                    Reconnect
-                  </>
-                )}
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={clearDebugLogs}
-              >
-                Clear Logs
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-              <div>
-                <p className="font-semibold mb-1">Connection Status:</p>
-                <Badge 
-                  variant={connected ? "default" : "destructive"}
-                  className="flex items-center w-fit gap-1"
-                >
-                  {connected ? (
-                    <>
-                      <Wifi className="h-3 w-3" /> Connected
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-3 w-3" /> Disconnected
-                    </>
-                  )}
-                </Badge>
-              </div>
-              
-              <div>
-                <p className="font-semibold mb-1">User ID:</p>
-                <code className="bg-muted p-1 rounded font-mono text-xs">
-                  {user?.id || "Not authenticated"}
-                </code>
-              </div>
-              
-              <div>
-                <p className="font-semibold mb-1">OBS URL:</p>
-                <div className="flex items-center gap-1">
-                  <code className="bg-muted p-1 rounded font-mono text-xs truncate max-w-[200px]">
-                    {user ? obsWebhookConfig.getObsUrl(user.id) : "Not available"}
-                  </code>
-                  {user && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 w-6 p-0" 
-                      onClick={() => {
-                        navigator.clipboard.writeText(obsWebhookConfig.getObsUrl(user.id));
-                        toast.success("URL copied to clipboard");
-                      }}
-                    >
-                      📋
-                    </Button>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                <p className="font-semibold mb-1">Active Style:</p>
-                <code className="bg-muted p-1 rounded font-mono text-xs">
-                  {activeStyle ? 
-                    `${activeStyle.name} (${activeStyle.animation_type || 'default'})` : 
-                    "No active style"}
-                </code>
-              </div>
-            </div>
-            
-            <div>
-              <p className="font-semibold mb-1">Debug Logs:</p>
-              <div className="bg-black/90 text-green-400 p-3 rounded font-mono text-xs h-64 overflow-auto">
-                {debugLogs.length > 0 ? (
-                  debugLogs.map((log, i) => (
-                    <div key={i} className="whitespace-pre-wrap mb-1">{log}</div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 italic">No logs yet. Try sending a test alert or reconnecting.</p>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                These logs show webhook traffic and connection events. Useful for debugging OBS integration issues.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="mb-6">
         <Button 
