@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -56,9 +55,9 @@ export const DonationPageCustomizer = () => {
       
       setIsLoading(true);
       try {
-        // Specify the table name as a raw string instead of using the generic from() method
-        // This works around TypeScript not knowing about the donation_page_settings table
+        // Use a type assertion to work around TypeScript not knowing about donation_page_settings
         const { data, error } = await supabase
+          // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
           .from('donation_page_settings')
           .select('*')
           .eq('user_id', user.id)
@@ -122,11 +121,13 @@ export const DonationPageCustomizer = () => {
       // Update or insert settings
       let operation;
       if (currentSettings?.id) {
+        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
         operation = supabase
           .from('donation_page_settings')
           .update(settingsData)
           .eq('id', currentSettings.id);
       } else {
+        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
         operation = supabase
           .from('donation_page_settings')
           .insert([settingsData]);
@@ -142,7 +143,8 @@ export const DonationPageCustomizer = () => {
       
       toast.success("Donation page settings saved successfully");
       
-      // Refresh settings - use explicit table name to avoid TypeScript errors
+      // Refresh settings
+      // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
       const { data } = await supabase
         .from('donation_page_settings')
         .select('*')

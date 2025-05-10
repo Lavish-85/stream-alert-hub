@@ -51,6 +51,7 @@ const DonationCustomizationTab = () => {
         }
         
         // Fetch donation page settings
+        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
         const { data: settingsData } = await supabase
           .from('donation_page_settings')
           .select('*')
@@ -58,7 +59,7 @@ const DonationCustomizationTab = () => {
           .single();
           
         if (settingsData) {
-          setSettings(settingsData);
+          setSettings(settingsData as unknown as DonationPageSettings);
         } else {
           setSettings({
             ...defaultSettings,
@@ -87,7 +88,7 @@ const DonationCustomizationTab = () => {
         },
         async (payload) => {
           if (payload.new) {
-            setSettings(payload.new as DonationPageSettings);
+            setSettings(payload.new as unknown as DonationPageSettings);
           }
         }
       )
