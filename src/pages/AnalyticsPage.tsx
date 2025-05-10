@@ -9,45 +9,14 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-import { 
-  DownloadCloud, 
-  TrendingUp, 
-  Users, 
-  BadgeIndianRupee,
-  Clock 
-} from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { cn } from "@/lib/utils";
+import { DownloadCloud } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-
-// Type definitions for the donations data
-interface Donation {
-  id: number;
-  payment_id: string;
-  amount: number;
-  donor_name: string;
-  message: string | null;
-  created_at: string;
-}
+import { toast } from "@/hooks/use-toast";
+import { Donation, DonationAnalytics, RecentDonation } from "@/types/donation";
+import DonationMetricsCards from "@/components/analytics/DonationMetricsCards";
+import DonationChart from "@/components/analytics/DonationChart";
+import RecentDonationsTable from "@/components/analytics/RecentDonationsTable";
 
 // Function to fetch donations from Supabase
 const fetchDonations = async () => {
@@ -66,13 +35,13 @@ const fetchDonations = async () => {
 
 // Generate donation analytics data from real donations
 const generateDonationAnalytics = (donations: Donation[], days: number = 30) => {
-  const data = [];
+  const data: DonationAnalytics[] = [];
   const today = new Date();
   const startDate = new Date(today);
   startDate.setDate(today.getDate() - days);
   
   // Create a map for each day
-  const dailyMap: Record<string, { date: string, amount: number, viewers: number }> = {};
+  const dailyMap: Record<string, DonationAnalytics> = {};
   
   // Initialize the map with zero values for each day
   for (let i = 0; i <= days; i++) {
@@ -100,7 +69,7 @@ const generateDonationAnalytics = (donations: Donation[], days: number = 30) => 
 };
 
 // Format donations for the recent donations table
-const formatRecentDonations = (donations: Donation[]) => {
+const formatRecentDonations = (donations: Donation[]): RecentDonation[] => {
   return donations.map(donation => ({
     id: donation.id,
     name: donation.donor_name,
@@ -133,12 +102,16 @@ const calculateMetrics = (donations: Donation[]) => {
       topSupporter = donation;
     }
   }
+
+  // Calculate unique donors
+  const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
   
   return {
     todayTotal,
     numberOfGifts,
     averageDonation,
-    topSupporter
+    topSupporter,
+    totalDonors: uniqueDonors
   };
 };
 
@@ -152,6 +125,30 @@ const AnalyticsPage = () => {
     queryFn: fetchDonations
   });
   
+  // Setup realtime subscription for new donations
+  useEffect(() => {
+    const channel = supabase
+      .channel('analytics-donations')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'donations'
+        },
+        () => {
+          // Invalidate and refetch donations when database changes
+          // This will trigger a refetch of the data
+          window.location.reload();
+        }
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const formatIndianRupees = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -184,14 +181,60 @@ const AnalyticsPage = () => {
   };
   
   // Process data once donations are loaded
-  const chartData = donations ? generateDonationAnalytics(donations, parseInt(dateRange.replace('d', ''))) : [];
+  const allChartData = donations ? generateDonationAnalytics(donations, parseInt(dateRange.replace('d', ''))) : [];
   const recentDonations = donations ? formatRecentDonations(donations) : [];
-  const metrics = donations ? calculateMetrics(donations) : { todayTotal: 0, numberOfGifts: 0, averageDonation: 0, topSupporter: null };
+  const metrics = donations ? calculateMetrics(donations) : { 
+    todayTotal: 0, 
+    numberOfGifts: 0, 
+    averageDonation: 0, 
+    topSupporter: null, 
+    totalDonors: 0 
+  };
   
   // Filter chart data based on selected date range
-  const filteredChartData = () => {
+  const chartData = () => {
     const days = parseInt(dateRange.replace('d', ''));
-    return chartData.slice(-days);
+    return allChartData.slice(-days);
+  };
+
+  const handleExportCSV = () => {
+    if (!donations || donations.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "There are no donations to export at this time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Create CSV content
+    const headers = ["ID", "Donor Name", "Amount", "Date", "Message"];
+    const csvRows = [
+      headers.join(","),
+      ...donations.map(d => [
+        d.id,
+        `"${d.donor_name.replace(/"/g, '""')}"`, // Escape quotes in donor names
+        d.amount,
+        new Date(d.created_at).toLocaleDateString(),
+        `"${d.message ? d.message.replace(/"/g, '""') : ''}"`
+      ].join(","))
+    ];
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    
+    // Create download link and click it
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `donations_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export Successful",
+      description: "Your donation data has been exported as a CSV file.",
+    });
   };
 
   // Handle loading and error states
@@ -234,190 +277,36 @@ const AnalyticsPage = () => {
               <SelectItem value="30d">Last 30 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
             <DownloadCloud className="h-4 w-4" /> Export CSV
           </Button>
         </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Today's Donations</CardTitle>
-            <BadgeIndianRupee className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatIndianRupees(metrics.todayTotal)}</div>
-            <p className="text-xs text-muted-foreground">
-              +12% from yesterday
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Number of Gifts</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.numberOfGifts}</div>
-            <p className="text-xs text-muted-foreground">
-              From {recentDonations.length} unique supporters
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Average Donation</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatIndianRupees(metrics.averageDonation)}</div>
-            <p className="text-xs text-muted-foreground">
-              +5% from previous period
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Top Supporter</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.topSupporter ? metrics.topSupporter.donor_name : "-"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {metrics.topSupporter ? formatIndianRupees(Number(metrics.topSupporter.amount)) : "No donations today"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <DonationMetricsCards 
+        todayTotal={metrics.todayTotal}
+        numberOfGifts={metrics.numberOfGifts}
+        averageDonation={metrics.averageDonation}
+        topSupporter={metrics.topSupporter}
+        formatIndianRupees={formatIndianRupees}
+        totalDonors={metrics.totalDonors}
+      />
 
       {/* Chart Section */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Donation Trends</CardTitle>
-        </CardHeader>
-        <CardContent className="h-[300px]">
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={filteredChartData()}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8445ff" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8445ff" stopOpacity={0.1}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="date" 
-                  tickFormatter={formatDate} 
-                  tick={{fontSize: 12}}
-                  stroke="#94a3b8" 
-                />
-                <YAxis 
-                  tickFormatter={(value) => `₹${value}`} 
-                  tick={{fontSize: 12}}
-                  stroke="#94a3b8"
-                />
-                <RechartsTooltip 
-                  formatter={(value: any) => [`₹${value}`, 'Amount']}
-                  labelFormatter={(label) => formatDate(label.toString())}
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '0.375rem',
-                    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-                  }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="amount" 
-                  stroke="#8445ff" 
-                  fillOpacity={1} 
-                  fill="url(#colorAmount)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <p className="text-muted-foreground">No donation data available for this period</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <DonationChart 
+        chartData={chartData()}
+        formatDate={formatDate}
+      />
 
       {/* Donations Table */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Recent Donations</CardTitle>
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col space-y-1">
-              <span className="text-xs text-muted-foreground">Min Amount</span>
-              <div className="flex items-center gap-2">
-                <Slider
-                  value={[minAmount]}
-                  min={0}
-                  max={1000}
-                  step={100}
-                  className="w-[120px]"
-                  onValueChange={(value) => setMinAmount(value[0])}
-                />
-                <span className="text-sm w-16">₹{minAmount}+</span>
-              </div>
-            </div>
-            <Input
-              placeholder="Search donor..."
-              className="max-w-[180px]"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Donor</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Message</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentDonations.length > 0 ? (
-                recentDonations
-                  .filter(donation => donation.amount >= minAmount)
-                  .map((donation) => (
-                    <TableRow key={donation.id}>
-                      <TableCell className="text-muted-foreground">
-                        {formatTimestamp(donation.timestamp)}
-                      </TableCell>
-                      <TableCell className="font-medium">{donation.name}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatIndianRupees(donation.amount)}
-                      </TableCell>
-                      <TableCell className={cn(
-                        "max-w-[300px] truncate",
-                        !donation.message && "text-muted-foreground italic"
-                      )}>
-                        {donation.message || "No message"}
-                      </TableCell>
-                    </TableRow>
-                  ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center">
-                    <p className="text-muted-foreground">No donations found</p>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <RecentDonationsTable
+        donations={recentDonations}
+        minAmount={minAmount}
+        setMinAmount={setMinAmount}
+        formatIndianRupees={formatIndianRupees}
+        formatTimestamp={formatTimestamp}
+      />
     </div>
   );
 };
