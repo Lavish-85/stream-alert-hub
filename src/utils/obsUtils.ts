@@ -2,7 +2,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
-import { obsWebhookConfig, WEBHOOK_DEBUG } from "@/config/webhookConfig";
+import { obsWebhookConfig, WEBHOOK_DEBUG, testWebhookConnection, runWebhookDiagnostics } from "@/config/webhookConfig";
 
 /**
  * Sends a test alert to the OBS browser source
@@ -154,7 +154,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
     let timeoutId: NodeJS.Timeout | null = null;
     
     if (WEBHOOK_DEBUG) {
-      obsWebhookConfig.logWebhookEvent('TESTING_REALTIME', { channelId });
+      const timestamp = new Date().toLocaleTimeString();
+      obsWebhookConfig.logWebhookEvent('TESTING_REALTIME', { channelId, timestamp });
     }
     
     return new Promise((resolve) => {
@@ -162,7 +163,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
       timeoutId = setTimeout(() => {
         console.log("Realtime test timed out");
         if (WEBHOOK_DEBUG) {
-          obsWebhookConfig.logWebhookEvent('REALTIME_TEST_TIMEOUT');
+          const timestamp = new Date().toLocaleTimeString();
+          obsWebhookConfig.logWebhookEvent('REALTIME_TEST_TIMEOUT', { timestamp });
         }
         if (!testSuccessful) {
           resolve(false);
@@ -175,7 +177,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         .on('presence', { event: 'sync' }, () => {
           console.log("Realtime presence sync successful");
           if (WEBHOOK_DEBUG) {
-            obsWebhookConfig.logWebhookEvent('REALTIME_SYNC_SUCCESS');
+            const timestamp = new Date().toLocaleTimeString();
+            obsWebhookConfig.logWebhookEvent('REALTIME_SYNC_SUCCESS', { timestamp });
           }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
@@ -185,7 +188,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         .on('presence', { event: 'join' }, () => {
           console.log("Realtime presence join successful");
           if (WEBHOOK_DEBUG) {
-            obsWebhookConfig.logWebhookEvent('REALTIME_JOIN_SUCCESS');
+            const timestamp = new Date().toLocaleTimeString();
+            obsWebhookConfig.logWebhookEvent('REALTIME_JOIN_SUCCESS', { timestamp });
           }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
@@ -194,7 +198,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         })
         .subscribe(async (status) => {
           if (WEBHOOK_DEBUG) {
-            obsWebhookConfig.logWebhookEvent('REALTIME_SUBSCRIPTION_STATUS', status);
+            const timestamp = new Date().toLocaleTimeString();
+            obsWebhookConfig.logWebhookEvent('REALTIME_SUBSCRIPTION_STATUS', { status, timestamp });
           }
           
           if (status === 'SUBSCRIBED') {
@@ -214,7 +219,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
         }, () => {
           console.log("Postgres changes subscription successful");
           if (WEBHOOK_DEBUG) {
-            obsWebhookConfig.logWebhookEvent('POSTGRES_CHANGES_SUCCESS');
+            const timestamp = new Date().toLocaleTimeString();
+            obsWebhookConfig.logWebhookEvent('POSTGRES_CHANGES_SUCCESS', { timestamp });
           }
           testSuccessful = true;
           if (timeoutId) clearTimeout(timeoutId);
@@ -225,7 +231,8 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
   } catch (error) {
     console.error("Error testing realtime connection:", error);
     if (WEBHOOK_DEBUG) {
-      obsWebhookConfig.logWebhookEvent('REALTIME_TEST_ERROR', error);
+      const timestamp = new Date().toLocaleTimeString();
+      obsWebhookConfig.logWebhookEvent('REALTIME_TEST_ERROR', { error, timestamp });
     }
     return false;
   }
@@ -234,40 +241,55 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
 /**
  * Monitors webhook connection by checking for activity
  * Returns percentage uptime and connection status
+ * Enhanced with diagnostics information
  */
 export const monitorWebhookConnection = async (channelId: string): Promise<{
   isConnected: boolean;
-  lastPing?: Date;
+  lastChecked?: Date;
   uptime?: number;
+  diagnostics?: any;
 }> => {
   try {
     if (WEBHOOK_DEBUG) {
-      obsWebhookConfig.logWebhookEvent('MONITOR_WEBHOOK', { channelId });
+      const timestamp = new Date().toLocaleTimeString();
+      obsWebhookConfig.logWebhookEvent('MONITOR_WEBHOOK', { channelId, timestamp });
     }
     
     // Test the realtime connection
     const isConnected = await testRealtimeConnection(channelId);
     
+    // Run enhanced diagnostics
+    const diagnostics = await runWebhookDiagnostics(channelId);
+    
     if (WEBHOOK_DEBUG) {
+      const timestamp = new Date().toLocaleTimeString();
       obsWebhookConfig.logWebhookEvent('MONITOR_RESULT', { 
         isConnected,
-        timestamp: new Date().toISOString()
+        timestamp,
+        diagnosticsStatus: diagnostics.overallStatus
       });
     }
     
     return {
       isConnected,
-      lastPing: new Date(),
+      lastChecked: new Date(),
       // In a real implementation, we would calculate uptime based on historical data
-      uptime: 100
+      uptime: 100,
+      diagnostics
     };
   } catch (error) {
     console.error("Error monitoring webhook connection:", error);
     if (WEBHOOK_DEBUG) {
-      obsWebhookConfig.logWebhookEvent('MONITOR_ERROR', error);
+      const timestamp = new Date().toLocaleTimeString();
+      obsWebhookConfig.logWebhookEvent('MONITOR_ERROR', { error, timestamp });
     }
     return {
-      isConnected: false
+      isConnected: false,
+      diagnostics: {
+        overallStatus: 'ERROR',
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      }
     };
   }
 };

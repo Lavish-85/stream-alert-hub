@@ -6,10 +6,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getOBSUrl, testRealtimeConnection, monitorWebhookConnection } from "@/utils/obsUtils";
-import { Check, Copy, RefreshCw, Loader2, Activity, AlertCircle } from "lucide-react";
+import { Check, Copy, RefreshCw, Loader2, Activity, AlertCircle, Wifi, WifiOff, Bug } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { obsWebhookConfig, WEBHOOK_DEBUG } from "@/config/webhookConfig";
+import { obsWebhookConfig, WEBHOOK_DEBUG, runWebhookDiagnostics } from "@/config/webhookConfig";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const SetupPage = () => {
@@ -21,10 +21,12 @@ const SetupPage = () => {
     isConnected: boolean;
     lastChecked?: Date;
     uptime?: number;
+    diagnostics?: any;
   }>({
     isConnected: false
   });
   const [debugLogs, setDebugLogs] = useState<Array<{timestamp: Date, message: string, type: string}>>([]);
+  const [diagnosticsResult, setDiagnosticsResult] = useState<any>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -70,6 +72,18 @@ const SetupPage = () => {
     addDebugLog("Starting connection test...", "info");
     
     try {
+      // Perform a full diagnostic test
+      const diagnostics = await runWebhookDiagnostics(user.id);
+      setDiagnosticsResult(diagnostics);
+      
+      addDebugLog(`Webhook diagnostics completed. Status: ${diagnostics.overallStatus}`, 
+        diagnostics.overallStatus === 'HEALTHY' ? "success" : "warning");
+      
+      // Log the detailed results
+      addDebugLog(`URL test: ${diagnostics.urlTest.message}`, 
+        diagnostics.urlTest.success ? "success" : "error");
+      
+      // Also check realtime connection
       const isConnected = await testRealtimeConnection(user.id);
       if (isConnected) {
         addDebugLog("Realtime connection test successful!", "success");
@@ -86,8 +100,17 @@ const SetupPage = () => {
       addDebugLog("Webhook connection status: " + (status.isConnected ? "Connected" : "Disconnected"), 
         status.isConnected ? "success" : "error");
       
+      // Summary message
+      if (diagnostics.overallStatus === 'HEALTHY' && isConnected) {
+        toast.success("All connection tests passed! Your webhooks are working properly.");
+      } else if (diagnostics.overallStatus === 'HEALTHY' && !isConnected) {
+        toast.warning("URL tests passed but realtime connection failed. Check network settings.");
+      } else {
+        toast.error("Some connection tests failed. See debug console for details.");
+      }
+      
     } catch (error: any) {
-      console.error("Error testing realtime connection:", error);
+      console.error("Error testing connections:", error);
       addDebugLog(`Connection test error: ${error.message || "Unknown error"}`, "error");
       toast.error(`Failed to test connection: ${error.message || "Unknown error"}`);
     } finally {
@@ -228,6 +251,38 @@ const SetupPage = () => {
                       Connection uptime: {connectionStatus.uptime}%
                     </p>
                   )}
+                  
+                  {/* Show diagnostics result if available */}
+                  {diagnosticsResult && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <h5 className="font-medium text-xs mb-1">Diagnostics Result:</h5>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center">
+                          <span className="font-semibold mr-1">Status:</span>
+                          <Badge 
+                            variant={diagnosticsResult.overallStatus === 'HEALTHY' ? 'default' : 'destructive'}
+                            className="text-xs h-5"
+                          >
+                            {diagnosticsResult.overallStatus}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="font-semibold">Time:</span> {new Date(diagnosticsResult.timestamp).toLocaleTimeString()}
+                        </div>
+                        <div className="flex items-center">
+                          <span className="font-semibold mr-1">URL Test:</span>
+                          {diagnosticsResult.urlTest.success ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-3 w-3 text-red-500" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Protocol:</span> {diagnosticsResult.environment.protocol}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -293,7 +348,121 @@ const SetupPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="bg-muted p-4 rounded-md h-[400px] overflow-y-auto font-mono text-sm">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Connection Status</h3>
+                  <div className="p-3 bg-muted rounded-md space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Realtime Connection:</span>
+                      {connectionStatus.isConnected ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          <Wifi className="mr-1 h-3 w-3" /> Connected
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                          <WifiOff className="mr-1 h-3 w-3" /> Disconnected
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Last Check:</span>
+                      <span className="text-sm text-muted-foreground">
+                        {connectionStatus.lastChecked ? 
+                          connectionStatus.lastChecked.toLocaleTimeString() : 
+                          'Not checked yet'}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Debug Mode:</span>
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        {WEBHOOK_DEBUG ? 'Enabled' : 'Disabled'}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Test Webhook</h3>
+                  <div className="p-3 bg-muted rounded-md space-y-3">
+                    <Button 
+                      onClick={handleTestConnection}
+                      disabled={isTestingConnection || !user?.id}
+                      className="w-full flex items-center gap-2"
+                    >
+                      {isTestingConnection ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Running Test...
+                        </>
+                      ) : (
+                        <>
+                          <Bug className="h-4 w-4" />
+                          Run Full Diagnostics
+                        </>
+                      )}
+                    </Button>
+                    
+                    <p className="text-xs text-muted-foreground">
+                      This will test both the URL reachability and the realtime connection
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Diagnostics result display */}
+              {diagnosticsResult && (
+                <div className="my-4 p-3 bg-muted/50 border rounded-md">
+                  <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Diagnostics Result
+                  </h3>
+                  
+                  <div className="text-xs space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Overall Status:</span>
+                      <Badge 
+                        variant={diagnosticsResult.overallStatus === 'HEALTHY' ? 'default' : 'destructive'}
+                        className="capitalize"
+                      >
+                        {diagnosticsResult.overallStatus}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">URL Test:</span>
+                      <span className={diagnosticsResult.urlTest.success ? 
+                        "text-green-600 dark:text-green-400" : 
+                        "text-red-600 dark:text-red-400"
+                      }>
+                        {diagnosticsResult.urlTest.message}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Protocol:</span>
+                      <code className="bg-muted-foreground/20 px-1 rounded">
+                        {diagnosticsResult.environment.protocol}
+                      </code>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Browser:</span>
+                      <span className="truncate max-w-[200px]" title={diagnosticsResult.environment.userAgent}>
+                        {diagnosticsResult.environment.userAgent.split(' ')[0]}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Timestamp:</span>
+                      <span>{new Date(diagnosticsResult.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="bg-muted p-4 rounded-md h-[400px] overflow-y-auto font-mono text-sm mt-4">
                 {debugLogs.length > 0 ? (
                   debugLogs.map((log, i) => (
                     <div 
@@ -301,6 +470,7 @@ const SetupPage = () => {
                       className={`mb-1 ${
                         log.type === 'error' ? 'text-red-500' :
                         log.type === 'success' ? 'text-green-500' :
+                        log.type === 'warning' ? 'text-yellow-500' :
                         'text-muted-foreground'
                       }`}
                     >
@@ -309,30 +479,14 @@ const SetupPage = () => {
                   ))
                 ) : (
                   <div className="text-muted-foreground text-center py-20">
-                    No logs yet. Test the connection to generate logs.
+                    No logs yet. Run a connection test to generate logs.
                   </div>
                 )}
               </div>
               
-              <div className="mt-4">
-                <Button 
-                  onClick={handleTestConnection}
-                  disabled={isTestingConnection}
-                >
-                  {isTestingConnection ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Running Test...
-                    </>
-                  ) : (
-                    "Run Connection Test"
-                  )}
-                </Button>
-                
-                <p className="text-xs text-muted-foreground mt-2">
-                  When enabled, webhook debug logs will also appear in your browser's Developer Console (F12)
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Tip: You can also check your browser's Developer Console (F12) for more detailed webhook logs
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
