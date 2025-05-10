@@ -54,7 +54,7 @@ const DonationCustomizationTab = () => {
         }
         
         // Fetch donation page settings
-        // @ts-ignore - Ignore TypeScript error as the table exists in the database
+        // @ts-ignore - The table exists in the database but TypeScript doesn't know about it yet
         const { data: settingsData } = await supabase
           .from(donationPageSettingsTable)
           .select('*')
