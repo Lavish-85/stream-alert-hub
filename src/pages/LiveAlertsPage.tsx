@@ -11,6 +11,7 @@ import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { sendTestAlert, getOBSUrl, testRealtimeConnection } from "@/utils/obsUtils";
 import { v4 as uuidv4 } from "uuid";
+import { obsWebhookConfig } from "@/config/webhookConfig";
 
 // Define the donation type based on our Supabase schema
 // Add clientId as an optional property to handle the temporary IDs
@@ -104,9 +105,9 @@ const LiveAlertsPage = () => {
           presenceChannelRef.current = null;
         }
         
-        // Create a new channel for database changes
+        // Create a new channel for database changes using the configured channel prefix
         const channel = supabase
-          .channel(`alerts-${targetChannel}-${uuidv4().substring(0, 8)}`)
+          .channel(`${obsWebhookConfig.realtimeChannelPrefix}${targetChannel}-${uuidv4().substring(0, 8)}`)
           .on('postgres_changes', 
             { 
               event: 'INSERT', 
@@ -154,7 +155,7 @@ const LiveAlertsPage = () => {
         
         // Also set up a presence channel for heartbeats and connection monitoring
         const presenceChannel = supabase
-          .channel(`presence-${targetChannel}`)
+          .channel(`${obsWebhookConfig.presenceChannelPrefix}${targetChannel}`)
           .on('presence', { event: 'sync' }, () => {
             const state = presenceChannel.presenceState();
             console.log('Presence state synchronized:', state);
@@ -456,32 +457,8 @@ const LiveAlertsPage = () => {
     }, 500);
   };
 
-  // If in OBS mode and no channel ID provided, show error
-  if (isOBSMode && !channelId) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background p-4">
-        <Alert variant="destructive" className="max-w-md shadow-lg">
-          <AlertTriangle className="h-6 w-6" />
-          <AlertTitle>Configuration Error</AlertTitle>
-          <AlertDescription className="space-y-3">
-            <p>Missing channel ID parameter. The OBS browser source URL is not configured correctly.</p>
-            
-            <div className="mt-2 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
-              <h4 className="font-bold mb-1">Troubleshooting:</h4>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>Return to the StreamDonate dashboard</li>
-                <li>Go to Setup page and copy the correct OBS URL</li>
-                <li>Make sure the URL includes the channel parameter</li>
-              </ol>
-            </div>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
-  // If in OBS mode, render a simplified version with no sidebars or other UI elements
-  if (isOBSMode) {
+  // If in OBS mode and channel ID provided, show the OBS view
+  if (isOBSMode && channelId) {
     // Get the default style if no activeStyle is set
     const getFallbackStyle = (): Partial<AlertStyle> => ({
       background_color: "#ffffff",
@@ -567,6 +544,30 @@ const LiveAlertsPage = () => {
     );
   }
 
+  // If in OBS mode and no channel ID provided, show error
+  if (isOBSMode && !channelId) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background p-4">
+        <Alert variant="destructive" className="max-w-md shadow-lg">
+          <AlertTriangle className="h-6 w-6" />
+          <AlertTitle>Configuration Error</AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>Missing channel ID parameter. The OBS browser source URL is not configured correctly.</p>
+            
+            <div className="mt-2 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
+              <h4 className="font-bold mb-1">Troubleshooting:</h4>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Return to the StreamDonate dashboard</li>
+                <li>Go to Setup page and copy the correct OBS URL</li>
+                <li>Make sure the URL includes the channel parameter</li>
+              </ol>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   // Normal mode (not OBS mode)
   return (
     <div className="max-w-6xl mx-auto">
@@ -645,17 +646,19 @@ const LiveAlertsPage = () => {
                 <input
                   type="text"
                   readOnly
-                  value={user ? `${window.location.origin}/live-alerts?obs=true&channel=${user.id}` : "Please sign in"}
+                  value={user ? obsWebhookConfig.getObsUrl(user.id) : "Please sign in"}
                   className="flex-1 bg-background px-3 py-2 text-sm border rounded-l-md"
                 />
                 <button 
                   className="bg-primary text-white px-3 py-2 rounded-r-md hover:bg-primary/90 disabled:opacity-50"
                   onClick={() => {
-                    const url = `${window.location.origin}/live-alerts?obs=true&channel=${user?.id}`;
-                    navigator.clipboard.writeText(url);
-                    toast.success("Copied!", {
-                      description: "Secure OBS URL copied to clipboard"
-                    });
+                    if (user) {
+                      const url = obsWebhookConfig.getObsUrl(user.id);
+                      navigator.clipboard.writeText(url);
+                      toast.success("Copied!", {
+                        description: "Secure OBS URL copied to clipboard"
+                      });
+                    }
                   }}
                   disabled={!user}
                 >

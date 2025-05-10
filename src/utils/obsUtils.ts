@@ -1,7 +1,7 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
+import { obsWebhookConfig } from "@/config/webhookConfig";
 
 /**
  * Sends a test alert to the OBS browser source
@@ -60,12 +60,8 @@ export const getOBSUrl = async () => {
       return null;
     }
     
-    // Create the OBS URL with the user ID as channel
-    const baseUrl = typeof window !== 'undefined' ? 
-      window.location.origin : 
-      'https://your-app-url.com'; // Fallback for SSR contexts
-    
-    return `${baseUrl}/live-alerts?obs=true&channel=${user.id}`;
+    // Use the configuration to generate the OBS URL
+    return obsWebhookConfig.getObsUrl(user.id);
   } catch (error) {
     console.error("Error generating OBS URL:", error);
     return null;
@@ -128,7 +124,7 @@ export const testRealtimeConnection = async (channelId: string): Promise<boolean
 
       // Create a temporary channel to test if realtime is working
       const channel = supabase
-        .channel(`test-${channelId}`)
+        .channel(`${obsWebhookConfig.realtimeChannelPrefix}${channelId}`)
         .on('presence', { event: 'sync' }, () => {
           console.log("Realtime presence sync successful");
           testSuccessful = true;
