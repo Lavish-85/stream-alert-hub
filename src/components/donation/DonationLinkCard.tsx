@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DollarSign, Copy, Check, ExternalLink } from "lucide-react";
+import { IndianRupee, Copy, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DonationLinkCardProps {
   userId: string;
@@ -14,14 +15,36 @@ interface DonationLinkCardProps {
 const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const [copied, setCopied] = useState(false);
   const { user } = useAuth();
+  const [customUrl, setCustomUrl] = useState<string | null>(null);
   
   // Ensure we have a valid user ID, falling back to the provided userId prop
   const effectiveUserId = user?.id || userId;
   
-  // Make sure we have a valid donation link with the appropriate user ID
-  const donationLink = effectiveUserId 
-    ? `${window.location.origin}/donate/${effectiveUserId}` 
-    : `${window.location.origin}/donate/your-channel-id`;
+  // Fetch custom URL if available
+  useEffect(() => {
+    if (effectiveUserId) {
+      const fetchCustomUrl = async () => {
+        const { data, error } = await supabase
+          .from('donation_page_settings')
+          .select('custom_url')
+          .eq('user_id', effectiveUserId)
+          .single();
+          
+        if (!error && data?.custom_url) {
+          setCustomUrl(data.custom_url);
+        }
+      };
+      
+      fetchCustomUrl();
+    }
+  }, [effectiveUserId]);
+  
+  // Make sure we have a valid donation link with the appropriate identifier
+  const donationLink = customUrl 
+    ? `${window.location.origin}/donate/${customUrl}` 
+    : effectiveUserId 
+      ? `${window.location.origin}/donate/${effectiveUserId}` 
+      : `${window.location.origin}/donate/your-channel-id`;
   
   const copyToClipboard = async () => {
     try {
@@ -37,8 +60,8 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   };
   
   const openDonationPage = () => {
-    // Validate that we have an actual user ID before opening
-    if (!effectiveUserId || effectiveUserId === 'your-channel-id') {
+    // Validate that we have an actual identifier before opening
+    if ((!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl) {
       toast.error("User ID not available. Please refresh or log in again.");
       return;
     }
@@ -49,7 +72,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
     <Card className="shadow-md">
       <CardHeader>
         <CardTitle className="flex items-center">
-          <DollarSign className="mr-2 h-5 w-5 text-emerald-500" />
+          <IndianRupee className="mr-2 h-5 w-5 text-emerald-500" />
           Donation Link
         </CardTitle>
         <CardDescription>
@@ -78,13 +101,13 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             variant="secondary" 
             className="w-full"
             onClick={openDonationPage}
-            disabled={!effectiveUserId || effectiveUserId === 'your-channel-id'}
+            disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
           >
             <ExternalLink className="mr-2 h-4 w-4" />
             Preview Donation Page
           </Button>
           
-          {(!effectiveUserId || effectiveUserId === 'your-channel-id') && (
+          {((!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl) && (
             <p className="text-sm text-amber-600">
               You need to be logged in to access the donation page.
             </p>

@@ -17,6 +17,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DonationPage from "./pages/DonationPage";
+import DonationCustomizePage from "./pages/DonationCustomizePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,7 +48,7 @@ const App = () => {
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
-                {/* Public donation page */}
+                {/* Public donation page with support for both ID and custom URL */}
                 <Route path="/donate/:channelId" element={<DonationPage />} />
 
                 {/* LiveAlerts route - handles both regular and token-authenticated OBS mode */}
@@ -66,6 +67,7 @@ const App = () => {
                 <Route path="/" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
                 <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
+                <Route path="/donation-customize" element={<ProtectedRoute><Layout><DonationCustomizePage /></Layout></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
