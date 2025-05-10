@@ -14,10 +14,10 @@ import {
   ArrowLeft,
   Save,
   Loader2,
-  TextAlignLeft,
+  AlignLeft,
   Palette,
   Speaker,
-  Font,
+  Type,
   Brush,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -41,7 +41,7 @@ const AlertsPage = () => {
     background_color: "#111827",
     volume: 50,
     duration: 5,
-    animation_type: "fade",
+    animation_type: "fade" as "fade" | "slide" | "bounce" | "zoom",
     sound: null,
     font_family: "inherit",
     description: "Default alert style",
@@ -198,7 +198,7 @@ const AlertsPage = () => {
 
               <div className="space-y-2">
                 <Label className="flex items-center">
-                  <TextAlignLeft className="mr-2 h-4 w-4" />
+                  <AlignLeft className="mr-2 h-4 w-4" />
                   Alert Text Color
                 </Label>
                 <ColorPicker
@@ -252,7 +252,7 @@ const AlertsPage = () => {
 
               <div className="space-y-2">
                 <Label className="flex items-center">
-                  <Font className="mr-2 h-4 w-4" />
+                  <Type className="mr-2 h-4 w-4" />
                   Font Family
                 </Label>
                 <Input
@@ -274,7 +274,7 @@ const AlertsPage = () => {
                     <Button
                       key={option.value}
                       variant={form.animation_type === option.value ? "default" : "outline"}
-                      onClick={() => setForm({ ...form, animation_type: option.value })}
+                      onClick={() => setForm({ ...form, animation_type: option.value as "fade" | "slide" | "bounce" | "zoom" })}
                     >
                       {option.label}
                     </Button>

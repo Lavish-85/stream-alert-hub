@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -869,15 +868,3 @@ const LiveAlertsPage = () => {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground text-base">
-                Donation alerts will appear here as they come in. When someone makes a donation, 
-                you'll see it instantly! Click "Send Test Alert Now" to test the system.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default LiveAlertsPage;
