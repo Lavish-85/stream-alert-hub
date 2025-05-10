@@ -13,15 +13,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   auth: {
     persistSession: true,
     autoRefreshToken: true, 
-    storage: typeof window !== 'undefined' ? localStorage : null
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
+    storage: localStorage
   }
 });
 
-// Enable realtime subscription by default
-// This will be used for the alerts system
-supabase.realtime.setAuth(SUPABASE_PUBLISHABLE_KEY);
+// Ensure test data is treated as valid data in the real-time subscription
