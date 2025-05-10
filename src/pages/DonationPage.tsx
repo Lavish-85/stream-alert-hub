@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { DollarSign, Gift, HandHeart } from "lucide-react";
+import { DollarSign, Gift, HandHeart, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Form schema
 const donationFormSchema = z.object({
@@ -30,6 +31,7 @@ const DonationPage = () => {
   const [streamerInfo, setStreamerInfo] = useState<{ name?: string; avatar_url?: string } | null>(null);
   const [donationComplete, setDonationComplete] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -47,14 +49,15 @@ const DonationPage = () => {
       const loaded = await loadRazorpayScript();
       setRazorpayLoaded(loaded);
       if (!loaded) {
+        setError("Could not load payment system. Please try again later.");
         toast.error("Could not load payment system. Please try again later.");
       }
     };
     
     const fetchStreamerInfo = async () => {
       if (!channelId) {
+        setError("Invalid donation link");
         toast.error("Invalid donation link");
-        navigate("/");
         return;
       }
 
@@ -63,10 +66,11 @@ const DonationPage = () => {
           .from('profiles')
           .select('display_name, avatar_url, streamer_name')
           .eq('id', channelId)
-          .single();
+          .maybeSingle();
 
         if (error || !data) {
           console.error("Error fetching streamer info:", error);
+          setError("Could not find this streamer");
           toast.error("Could not find this streamer");
           return;
         }
@@ -77,6 +81,7 @@ const DonationPage = () => {
         });
       } catch (err) {
         console.error("Exception fetching streamer info:", err);
+        setError("Failed to load streamer information");
         toast.error("Failed to load streamer information");
       }
     };
@@ -85,21 +90,26 @@ const DonationPage = () => {
     
     if (channelId) {
       fetchStreamerInfo();
+    } else {
+      setError("Invalid donation link - missing channel ID");
     }
   }, [channelId, navigate]);
 
   const onSubmit = async (values: DonationFormValues) => {
     if (!channelId) {
       toast.error("Invalid donation link");
+      setError("Invalid donation link - missing channel ID");
       return;
     }
 
     if (!razorpayLoaded) {
       toast.error("Payment system is not ready. Please refresh the page.");
+      setError("Payment system is not ready");
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     
     try {
       console.log("Creating donation order with values:", values);
@@ -113,7 +123,17 @@ const DonationPage = () => {
       });
 
       if (orderResult.error) {
+        console.error("Order creation error:", orderResult.error);
         toast.error(orderResult.error);
+        setError(`Failed to create order: ${orderResult.error}`);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!orderResult.orderId) {
+        console.error("Missing order ID in order result:", orderResult);
+        toast.error("Failed to generate order ID");
+        setError("Failed to generate order ID");
         setIsLoading(false);
         return;
       }
@@ -147,6 +167,7 @@ const DonationPage = () => {
             toast.success("Thank you for your donation!");
             setDonationComplete(true);
           } else {
+            setError(verificationResult.error || "Payment verification failed");
             toast.error(verificationResult.error || "Payment verification failed");
           }
           
@@ -155,7 +176,9 @@ const DonationPage = () => {
       );
     } catch (err) {
       console.error("Exception processing donation:", err);
-      toast.error("Failed to process donation");
+      const errorMessage = err instanceof Error ? err.message : "Failed to process donation";
+      toast.error(errorMessage);
+      setError(errorMessage);
       setIsLoading(false);
     }
   };
@@ -185,6 +208,41 @@ const DonationPage = () => {
           </CardContent>
           <CardFooter className="flex justify-center">
             <Button onClick={() => navigate("/")} variant="outline">Return Home</Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Display error state if there's an error
+  if (error && !isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 to-indigo-100 p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-red-600">
+              <AlertCircle className="mx-auto mb-2 h-12 w-12" />
+              Error
+            </CardTitle>
+            <CardDescription>
+              We encountered a problem
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                {error}
+              </AlertDescription>
+            </Alert>
+            <p className="text-muted-foreground">
+              Please try again later or contact support.
+            </p>
+          </CardContent>
+          <CardFooter className="flex justify-center">
+            <Button onClick={() => navigate("/")} variant="outline" className="mr-2">Return Home</Button>
+            <Button onClick={() => window.location.reload()} variant="default">Try Again</Button>
           </CardFooter>
         </Card>
       </div>

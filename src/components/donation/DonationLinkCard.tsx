@@ -1,11 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DollarSign, Copy, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface DonationLinkCardProps {
@@ -16,7 +15,13 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const [copied, setCopied] = useState(false);
   const { user } = useAuth();
   
-  const donationLink = `${window.location.origin}/donate/${userId}`;
+  // Ensure we have a valid user ID, falling back to the provided userId prop
+  const effectiveUserId = user?.id || userId;
+  
+  // Make sure we have a valid donation link with the appropriate user ID
+  const donationLink = effectiveUserId 
+    ? `${window.location.origin}/donate/${effectiveUserId}` 
+    : `${window.location.origin}/donate/your-channel-id`;
   
   const copyToClipboard = async () => {
     try {
@@ -32,6 +37,11 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   };
   
   const openDonationPage = () => {
+    // Validate that we have an actual user ID before opening
+    if (!effectiveUserId || effectiveUserId === 'your-channel-id') {
+      toast.error("User ID not available. Please refresh or log in again.");
+      return;
+    }
     window.open(donationLink, '_blank');
   };
 
@@ -68,10 +78,17 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             variant="secondary" 
             className="w-full"
             onClick={openDonationPage}
+            disabled={!effectiveUserId || effectiveUserId === 'your-channel-id'}
           >
             <ExternalLink className="mr-2 h-4 w-4" />
             Test Donation Page
           </Button>
+          
+          {(!effectiveUserId || effectiveUserId === 'your-channel-id') && (
+            <p className="text-sm text-amber-600">
+              You need to be logged in to access the donation page.
+            </p>
+          )}
         </div>
       </CardContent>
       <CardFooter>

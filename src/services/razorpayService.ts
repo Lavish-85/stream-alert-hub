@@ -20,23 +20,34 @@ interface CreateOrderResponse {
 // Function to create an order in the database
 export const createOrder = async (formData: DonationFormData): Promise<CreateOrderResponse> => {
   try {
-    // Generate a temporary order ID that will be used until Razorpay provides the real one
-    // In a real implementation, you would get this from Razorpay API
+    if (!formData.channelId) {
+      console.error("Missing channelId in form data");
+      return { error: "Invalid channel ID", orderId: "", amount: 0, orderData: null };
+    }
+
+    // Generate a guaranteed non-null temporary order ID
     const tempOrderId = `order_${Date.now()}_${Math.round(Math.random() * 1000000)}`;
     
     console.log("Creating order with temp ID:", tempOrderId);
     
-    // Create an order in our database
+    // Prepare the order data with all required fields
+    const orderData = {
+      amount: formData.amount,
+      donor_name: formData.name,
+      message: formData.message || "",
+      user_id: formData.channelId,
+      status: 'created',
+      razorpay_order_id: tempOrderId // Ensuring this field is always set
+    };
+    
+    // Create an order in our database with explicit validation
+    if (!orderData.razorpay_order_id) {
+      throw new Error("Failed to generate order ID");
+    }
+    
     const { data, error } = await supabase
       .from('orders')
-      .insert({
-        amount: formData.amount,
-        donor_name: formData.name,
-        message: formData.message || "",
-        user_id: formData.channelId,
-        status: 'created',
-        razorpay_order_id: tempOrderId // Ensuring this field is always included
-      })
+      .insert(orderData)
       .select()
       .single();
 
@@ -67,8 +78,10 @@ export const verifyPayment = async (
   signature: string
 ) => {
   try {
-    // In a real implementation, you would verify the signature on your server
-    // For now, we'll just update the order status and create a donation
+    if (!orderId) {
+      console.error("Missing orderId in verification request");
+      return { success: false, error: "Order ID is required" };
+    }
     
     // Get the order details
     const { data: orderData, error: orderError } = await supabase
@@ -119,6 +132,12 @@ export const verifyPayment = async (
 // Function to load the Razorpay script
 export const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
+    // Check if script is already loaded
+    if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
+      resolve(true);
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.onload = () => resolve(true);
@@ -141,6 +160,11 @@ export const openRazorpayCheckout = (
   // Make sure Razorpay is loaded
   if (!(window as any).Razorpay) {
     toast.error("Razorpay failed to load. Please refresh the page and try again.");
+    return;
+  }
+  
+  if (!orderId) {
+    toast.error("Invalid order ID. Please try again.");
     return;
   }
   
