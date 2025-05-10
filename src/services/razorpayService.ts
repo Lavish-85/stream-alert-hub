@@ -20,6 +20,10 @@ interface CreateOrderResponse {
 // Function to create an order in the database
 export const createOrder = async (formData: DonationFormData): Promise<CreateOrderResponse> => {
   try {
+    // Generate a temporary order ID that will be used until Razorpay provides the real one
+    // In a real implementation, you would get this from Razorpay API
+    const tempOrderId = `order_${Date.now()}_${Math.round(Math.random() * 1000000)}`;
+    
     // Create an order in our database
     const { data, error } = await supabase
       .from('orders')
@@ -28,7 +32,8 @@ export const createOrder = async (formData: DonationFormData): Promise<CreateOrd
         donor_name: formData.name,
         message: formData.message || "",
         user_id: formData.channelId,
-        status: 'created'
+        status: 'created',
+        razorpay_order_id: tempOrderId // Adding the required field
       })
       .select()
       .single();
@@ -40,7 +45,7 @@ export const createOrder = async (formData: DonationFormData): Promise<CreateOrd
 
     // Return the order details
     return {
-      orderId: data.razorpay_order_id || data.id.toString(),
+      orderId: data.razorpay_order_id,
       amount: data.amount,
       orderData: data
     };
