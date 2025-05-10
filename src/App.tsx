@@ -16,6 +16,7 @@ import { AlertStyleProvider } from "./contexts/AlertStyleContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DonationPage from "./pages/DonationPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +46,9 @@ const App = () => {
               <Routes>
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
+
+                {/* Public donation page */}
+                <Route path="/donate/:channelId" element={<DonationPage />} />
 
                 {/* LiveAlerts route - handles both regular and token-authenticated OBS mode */}
                 {/* OBS mode authentication is now handled within the component itself */}
