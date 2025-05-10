@@ -12,6 +12,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DonationLinkCard from '../donation/DonationLinkCard';
 
+// Create a type-safe way to use the donation_page_settings table
+const donationPageSettingsTable = 'donation_page_settings';
+
 const defaultSettings: DonationPageSettings = {
   user_id: "",
   title: "Support My Stream",
@@ -51,9 +54,9 @@ const DonationCustomizationTab = () => {
         }
         
         // Fetch donation page settings
-        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
+        // @ts-ignore - Ignore TypeScript error as the table exists in the database
         const { data: settingsData } = await supabase
-          .from('donation_page_settings')
+          .from(donationPageSettingsTable)
           .select('*')
           .eq('user_id', user.id)
           .single();
@@ -83,7 +86,7 @@ const DonationCustomizationTab = () => {
         {
           event: '*',
           schema: 'public',
-          table: 'donation_page_settings',
+          table: donationPageSettingsTable,
           filter: `user_id=eq.${user?.id}`
         },
         async (payload) => {

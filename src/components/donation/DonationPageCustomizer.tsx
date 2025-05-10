@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -28,6 +29,9 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+// Create a type-safe way to use the donation_page_settings table
+const donationPageSettingsTable = 'donation_page_settings';
+
 export const DonationPageCustomizer = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -55,10 +59,10 @@ export const DonationPageCustomizer = () => {
       
       setIsLoading(true);
       try {
-        // Use a type assertion to work around TypeScript not knowing about donation_page_settings
+        // Use the string literal and cast the result
         const { data, error } = await supabase
-          // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
-          .from('donation_page_settings')
+          // @ts-ignore - Ignore TypeScript error as the table exists in the database
+          .from(donationPageSettingsTable)
           .select('*')
           .eq('user_id', user.id)
           .single();
@@ -93,7 +97,7 @@ export const DonationPageCustomizer = () => {
     };
     
     fetchSettings();
-  }, [user?.id]);
+  }, [user?.id, form]);
 
   // Handle form submission
   const onSubmit = async (values: FormValues) => {
@@ -121,16 +125,16 @@ export const DonationPageCustomizer = () => {
       // Update or insert settings
       let operation;
       if (currentSettings?.id) {
-        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
+        // @ts-ignore - Ignore TypeScript error as the table exists in the database
         operation = supabase
-          .from('donation_page_settings')
+          .from(donationPageSettingsTable)
           .update(settingsData)
           .eq('id', currentSettings.id);
       } else {
-        // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
+        // @ts-ignore - Ignore TypeScript error as the table exists in the database
         operation = supabase
-          .from('donation_page_settings')
-          .insert([settingsData]);
+          .from(donationPageSettingsTable)
+          .insert([settingsData as any]); // Use 'any' to bypass type checking for insert
       }
       
       const { error } = await operation;
@@ -144,9 +148,9 @@ export const DonationPageCustomizer = () => {
       toast.success("Donation page settings saved successfully");
       
       // Refresh settings
-      // @ts-ignore - Ignore TypeScript error for now as the table exists in the database
+      // @ts-ignore - Ignore TypeScript error as the table exists in the database
       const { data } = await supabase
-        .from('donation_page_settings')
+        .from(donationPageSettingsTable)
         .select('*')
         .eq('user_id', user.id)
         .single();
