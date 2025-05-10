@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -17,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
+import { cn } from "@/lib/utils";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
@@ -533,7 +533,7 @@ const DonationPage = () => {
                           hover:scale-105 transition-transform
                         `}
                         style={selectedAmount === amount ? { 
-                          ringColor: primaryColor,
+                          borderColor: primaryColor,
                           backgroundColor: primaryColor 
                         } : {}}
                       >

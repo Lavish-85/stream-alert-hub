@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +14,7 @@ import { Palette, Check, RefreshCw, Link as LinkIcon, Loader2 } from "lucide-rea
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DonationLinkCard from "@/components/donation/DonationLinkCard";
+import { cn } from "@/lib/utils";
 
 // Form schema
 const customizationSchema = z.object({
