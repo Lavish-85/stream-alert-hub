@@ -28,9 +28,9 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
           .from('donation_page_settings')
           .select('custom_url')
           .eq('user_id', effectiveUserId)
-          .single();
+          .maybeSingle();
           
-        if (!error && data?.custom_url) {
+        if (!error && data && data.custom_url) {
           setCustomUrl(data.custom_url);
         }
       };

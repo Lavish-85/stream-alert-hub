@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -513,8 +512,7 @@ const DonationPage = () => {
                         `}
                         style={selectedAmount === amount ? { 
                           backgroundColor: primaryColor,
-                          borderColor: primaryColor,
-                          ringColor: primaryColor 
+                          borderColor: primaryColor
                         } : {}}
                       >
                         ₹{amount}

@@ -62,6 +62,7 @@ export type Database = {
           background_image: string | null
           created_at: string | null
           custom_thank_you_message: string
+          custom_url: string | null
           description: string
           goal_amount: number
           id: string
@@ -77,6 +78,7 @@ export type Database = {
           background_image?: string | null
           created_at?: string | null
           custom_thank_you_message?: string
+          custom_url?: string | null
           description?: string
           goal_amount?: number
           id?: string
@@ -92,6 +94,7 @@ export type Database = {
           background_image?: string | null
           created_at?: string | null
           custom_thank_you_message?: string
+          custom_url?: string | null
           description?: string
           goal_amount?: number
           id?: string
