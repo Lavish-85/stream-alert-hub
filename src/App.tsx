@@ -24,6 +24,7 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 10000, // 10 seconds - short enough to refresh data often
     },
   },
 });

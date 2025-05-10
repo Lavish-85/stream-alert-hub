@@ -11,10 +11,11 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker } from '@/components/ui/color-picker';
 import { toast } from 'sonner';
-import { DollarSign, Check, Copy, PaintBucket, Target, LinkIcon, IndianRupee } from 'lucide-react';
+import { DollarSign, Check, Copy, PaintBucket, Target, LinkIcon, IndianRupee, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DonationLinkCard from '@/components/donation/DonationLinkCard';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Form schema for validation
 const customizationFormSchema = z.object({
@@ -35,6 +36,9 @@ const DonationCustomizePage = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [refreshKey, setRefreshKey] = useState(Date.now());
   
   // Initialize form with default values
   const form = useForm<CustomizationFormValues>({
@@ -55,10 +59,16 @@ const DonationCustomizePage = () => {
   // Load existing settings when component mounts
   useEffect(() => {
     const loadSettings = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        toast.error("You must be logged in to customize your donation page");
+        return;
+      }
       
       setIsLoading(true);
+      setSaveError(null);
+      
       try {
+        console.log("Fetching settings for user ID:", user.id);
         const { data, error } = await supabase
           .from('donation_page_settings')
           .select('*')
@@ -67,7 +77,12 @@ const DonationCustomizePage = () => {
 
         if (error) {
           console.error("Error loading settings:", error);
+          if (error.code !== 'PGRST116') { // Not found error
+            toast.error("Failed to load your settings. Please try again.");
+          }
         } else if (data) {
+          console.log("Settings loaded:", data);
+          
           // Populate form with existing data
           form.reset({
             title: data.title,
@@ -80,16 +95,20 @@ const DonationCustomizePage = () => {
             secondary_color: data.secondary_color,
             custom_url: data.custom_url || ""
           });
+          
+          setLastSaved(new Date(data.updated_at));
+          toast.success("Your settings have been loaded");
         }
       } catch (err) {
         console.error("Failed to load settings:", err);
+        toast.error("An unexpected error occurred");
       } finally {
         setIsLoading(false);
       }
     };
 
     loadSettings();
-  }, [user?.id]);
+  }, [user?.id, refreshKey]);
 
   const onSubmit = async (values: CustomizationFormValues) => {
     if (!user?.id) {
@@ -98,7 +117,32 @@ const DonationCustomizePage = () => {
     }
 
     setIsSaving(true);
+    setSaveError(null);
+    
     try {
+      console.log("Saving settings:", values);
+      
+      // Check if custom URL already exists (if provided)
+      if (values.custom_url) {
+        const { data: existingUrl, error: urlCheckError } = await supabase
+          .from('donation_page_settings')
+          .select('user_id')
+          .eq('custom_url', values.custom_url)
+          .neq('user_id', user.id)
+          .maybeSingle();
+          
+        if (urlCheckError) {
+          console.error("Error checking URL availability:", urlCheckError);
+        }
+        
+        if (existingUrl) {
+          toast.error("This custom URL is already taken. Please choose another.");
+          setSaveError("This custom URL is already taken");
+          setIsSaving(false);
+          return;
+        }
+      }
+      
       // Upsert the settings
       const { error } = await supabase
         .from('donation_page_settings')
@@ -117,16 +161,29 @@ const DonationCustomizePage = () => {
         });
 
       if (error) {
+        console.error("Error saving settings:", error);
         toast.error("Failed to save settings: " + error.message);
+        setSaveError(error.message);
       } else {
+        setLastSaved(new Date());
         toast.success("Donation page settings saved successfully!");
+        
+        // Force refresh of the DonationLinkCard
+        setRefreshKey(Date.now());
       }
     } catch (err) {
       console.error("Error saving settings:", err);
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       toast.error("An error occurred while saving settings");
+      setSaveError(errorMessage);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshKey(Date.now());
+    toast.info("Refreshing settings...");
   };
 
   return (
@@ -136,6 +193,20 @@ const DonationCustomizePage = () => {
         <p className="text-muted-foreground">
           Personalize how your donation page looks and functions
         </p>
+        
+        {!user && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>
+              You need to be logged in to customize your donation page
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {lastSaved && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Last saved: {lastSaved.toLocaleString()}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -148,6 +219,12 @@ const DonationCustomizePage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {saveError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>{saveError}</AlertDescription>
+                </Alert>
+              )}
+              
               <Tabs defaultValue="content" className="w-full">
                 <TabsList className="grid grid-cols-3 mb-4">
                   <TabsTrigger value="content">Content</TabsTrigger>
@@ -359,13 +436,42 @@ const DonationCustomizePage = () => {
                       />
                     </TabsContent>
 
-                    <Button 
-                      type="submit" 
-                      className="w-full" 
-                      disabled={isLoading || isSaving}
-                    >
-                      {isSaving ? "Saving..." : "Save Changes"}
-                    </Button>
+                    <div className="flex items-center justify-between">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={handleRefresh}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            Refresh
+                          </>
+                        )}
+                      </Button>
+                      
+                      <Button 
+                        type="submit" 
+                        className="min-w-32" 
+                        disabled={isLoading || isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            {lastSaved ? "Save Changes" : "Save Settings"}
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </form>
                 </Form>
               </Tabs>
@@ -374,7 +480,7 @@ const DonationCustomizePage = () => {
         </div>
 
         <div>
-          <DonationLinkCard userId={user?.id || ""} />
+          <DonationLinkCard userId={user?.id || ""} key={refreshKey} />
           
           <Card className="mt-6">
             <CardHeader>
@@ -391,7 +497,11 @@ const DonationCustomizePage = () => {
                 variant="outline" 
                 className="w-full"
                 disabled={!user?.id}
-                onClick={() => window.open(`/donate/${user?.id || ''}`, '_blank')}
+                onClick={() => {
+                  // Use the current time as a cache-busting parameter
+                  const previewUrl = `/donate/${user?.id || ''}?preview=true&t=${Date.now()}`;
+                  window.open(previewUrl, '_blank');
+                }}
               >
                 <LinkIcon className="mr-2 h-4 w-4" />
                 Preview Donation Page

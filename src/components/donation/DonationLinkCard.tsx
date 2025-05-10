@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { IndianRupee, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
+import { IndianRupee, Copy, Check, ExternalLink, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
     
     try {
       setIsLoading(true);
+      console.log("Fetching custom URL for user:", effectiveUserId);
       const { data, error } = await supabase
         .from('donation_page_settings')
         .select('custom_url')
@@ -40,12 +41,15 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
       }
         
       if (data && data.custom_url) {
+        console.log("Found custom URL:", data.custom_url);
         setCustomUrl(data.custom_url);
       } else {
+        console.log("No custom URL found, using user ID");
         setCustomUrl(null);
       }
     } catch (err) {
       console.error("Exception fetching custom URL:", err);
+      toast.error("Failed to load donation link");
     } finally {
       setIsLoading(false);
     }
@@ -58,16 +62,14 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   
   // Make sure we have a valid donation link with the appropriate identifier
   const donationLink = customUrl 
-    ? `${window.location.origin}/donate/${customUrl}?t=${Date.now()}` 
+    ? `${window.location.origin}/donate/${customUrl}` 
     : effectiveUserId 
-      ? `${window.location.origin}/donate/${effectiveUserId}?t=${Date.now()}` 
-      : `${window.location.origin}/donate/your-channel-id?t=${Date.now()}`;
+      ? `${window.location.origin}/donate/${effectiveUserId}` 
+      : `${window.location.origin}/donate/your-channel-id`;
   
   const copyToClipboard = async () => {
     try {
-      // Remove cache-busting parameter when copying to clipboard
-      const cleanLink = donationLink.split('?')[0];
-      await navigator.clipboard.writeText(cleanLink);
+      await navigator.clipboard.writeText(donationLink);
       setCopied(true);
       toast.success("Donation link copied to clipboard!");
       
@@ -84,7 +86,8 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
       toast.error("User ID not available. Please refresh or log in again.");
       return;
     }
-    window.open(donationLink, '_blank');
+    // Add a timestamp to prevent caching issues
+    window.open(`${donationLink}?t=${Date.now()}`, '_blank');
   };
 
   const handleRefresh = () => {
@@ -107,7 +110,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
         <div className="flex flex-col space-y-4">
           <div className="flex space-x-2">
             <Input 
-              value={donationLink.split('?')[0]} // Remove cache-busting from displayed URL
+              value={donationLink}
               readOnly
               className="font-mono text-sm"
             />
@@ -139,7 +142,11 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
               disabled={isLoading}
               className="flex-shrink-0"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
             </Button>
           </div>
           
