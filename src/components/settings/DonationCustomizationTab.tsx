@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brush, ExternalLink, Edit, Eye } from "lucide-react";
+import { Brush, ExternalLink, Edit, Eye, PaintBucket } from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { DonationPageSettings } from '@/types/donation';
 import { supabase } from '@/integrations/supabase/client';
@@ -182,12 +182,22 @@ const DonationCustomizationTab = () => {
                         </div>
                       </div>
                     </div>
-                    <Button variant="outline" asChild className="w-full">
-                      <Link to="/donation-editor">
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit Donation Page
-                      </Link>
-                    </Button>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Button variant="outline" asChild className="w-full">
+                        <Link to="/donation-editor">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Donation Page
+                        </Link>
+                      </Button>
+                      
+                      <Button variant="outline" asChild className="w-full">
+                        <Link to="/donation-editor?tab=theme">
+                          <PaintBucket className="mr-2 h-4 w-4" />
+                          Customize App Theme
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -1,23 +1,27 @@
 
-import React, { ReactNode, useState } from "react";
-import { Outlet } from "react-router-dom";
-import Header from "./Header";
-import Sidebar from "./Sidebar";
+import React, { useEffect } from 'react';
+import { Outlet } from 'react-router-dom';
+import Header from './Header';
+import Sidebar from './Sidebar';
+import { Toaster } from 'sonner';
+import { loadSavedTheme } from '@/lib/utils';
 
-interface LayoutProps {
-  children?: ReactNode;
-}
+const Layout = () => {
+  // Load theme when the layout mounts
+  useEffect(() => {
+    loadSavedTheme();
+  }, []);
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-  
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header setIsMobileOpen={setIsMobileOpen} />
-      <Sidebar isMobileOpen={isMobileOpen} setIsMobileOpen={setIsMobileOpen} />
-      <main className="flex-1 md:ml-64 pt-6 p-4 md:p-8 my-[70px]">
-        {children || <Outlet />}
-      </main>
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+        <Toaster richColors position="top-right" />
+      </div>
     </div>
   );
 };
