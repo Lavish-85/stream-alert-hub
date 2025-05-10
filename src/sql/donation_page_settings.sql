@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.donation_page_settings (
   description TEXT NOT NULL DEFAULT 'Your donation will help me create better content!',
   primary_color TEXT NOT NULL DEFAULT '#8445ff',
   secondary_color TEXT NOT NULL DEFAULT '#4b1493',
+  background_color TEXT NOT NULL DEFAULT '#f8f9fa',
   background_image TEXT,
   goal_amount INTEGER NOT NULL DEFAULT 10000,
   show_donation_goal BOOLEAN NOT NULL DEFAULT true,

@@ -1,16 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
-import { DonationPageCustomizer } from '@/components/donation/DonationPageCustomizer';
-import DonationPagePreview from '@/components/donation/DonationPagePreview';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brush, ExternalLink } from "lucide-react";
+import { Brush, ExternalLink, Edit, Eye } from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { DonationPageSettings } from '@/types/donation';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DonationLinkCard from '../donation/DonationLinkCard';
+import DonationPagePreview from '@/components/donation/DonationPagePreview';
+import { Link } from 'react-router-dom';
 
 // Create a type-safe way to use the donation_page_settings table
 const donationPageSettingsTable = 'donation_page_settings';
@@ -21,6 +21,7 @@ const defaultSettings: DonationPageSettings = {
   description: "Your donation will help me create better content!",
   primary_color: "#8445ff",
   secondary_color: "#4b1493",
+  background_color: "#f8f9fa",
   goal_amount: 10000,
   show_donation_goal: true,
   show_recent_donors: true,
@@ -121,7 +122,75 @@ const DonationCustomizationTab = () => {
               <TabsTrigger value="share">Share</TabsTrigger>
             </TabsList>
             <TabsContent value="customize">
-              <DonationPageCustomizer />
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Donation Page Editor</CardTitle>
+                    <CardDescription>
+                      Customize how your donation page looks and works
+                    </CardDescription>
+                  </div>
+                  <Button asChild>
+                    <Link to="/donation-editor">
+                      <Edit className="mr-2 h-4 w-4" />
+                      Open Editor
+                    </Link>
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="rounded-lg border p-3">
+                        <div className="font-medium mb-1 flex items-center">
+                          <Eye className="h-4 w-4 mr-2 text-brand-500" />
+                          Current Settings
+                        </div>
+                        <ul className="text-sm space-y-1 text-muted-foreground">
+                          <li>Title: <span className="text-foreground">{settings.title}</span></li>
+                          <li>Goal: <span className="text-foreground">₹{settings.goal_amount.toLocaleString()}</span></li>
+                          <li>Goal Visible: <span className="text-foreground">{settings.show_donation_goal ? 'Yes' : 'No'}</span></li>
+                          <li>Recent Donors: <span className="text-foreground">{settings.show_recent_donors ? 'Visible' : 'Hidden'}</span></li>
+                        </ul>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="font-medium mb-1 flex items-center">
+                          <Brush className="h-4 w-4 mr-2 text-brand-500" />
+                          Colors
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <div className="flex flex-col items-center">
+                            <div 
+                              className="w-8 h-8 rounded-full border" 
+                              style={{backgroundColor: settings.primary_color}}
+                            ></div>
+                            <span className="text-xs mt-1">Primary</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <div 
+                              className="w-8 h-8 rounded-full border" 
+                              style={{backgroundColor: settings.secondary_color}}
+                            ></div>
+                            <span className="text-xs mt-1">Secondary</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <div 
+                              className="w-8 h-8 rounded-full border" 
+                              style={{backgroundColor: settings.background_color || "#f8f9fa"}}
+                            ></div>
+                            <span className="text-xs mt-1">Background</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <Button variant="outline" asChild className="w-full">
+                      <Link to="/donation-editor">
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Donation Page
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
             <TabsContent value="share">
               <DonationLinkCard userId={user?.id || ""} />
@@ -151,9 +220,11 @@ const DonationCustomizationTab = () => {
         <AlertDescription className="text-sm">
           <p>Your customizations are automatically applied to your donation page. Any viewer who visits your donation link will see these changes.</p>
           <div className="mt-3">
-            <Button size="sm" variant="outline">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              View Live Donation Page
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/donate/${user?.id}`} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View Live Donation Page
+              </Link>
             </Button>
           </div>
         </AlertDescription>

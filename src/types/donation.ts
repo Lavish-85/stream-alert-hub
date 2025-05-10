@@ -30,6 +30,7 @@ export interface DonationPageSettings {
   description: string;
   primary_color: string;
   secondary_color: string;
+  background_color?: string;
   background_image?: string | null;
   goal_amount: number;
   show_donation_goal: boolean;
@@ -47,6 +48,7 @@ export type DonationPageSettingsRow = {
   description: string;
   primary_color: string;
   secondary_color: string;
+  background_color: string;
   background_image: string | null;
   goal_amount: number;
   show_donation_goal: boolean;
