@@ -29,6 +29,7 @@ const DonationPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [streamerInfo, setStreamerInfo] = useState<{ name?: string; avatar_url?: string } | null>(null);
   const [donationComplete, setDonationComplete] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -40,8 +41,16 @@ const DonationPage = () => {
     },
   });
 
-  // Load streamer information
+  // Load Razorpay script and streamer information
   useEffect(() => {
+    const loadRazorpay = async () => {
+      const loaded = await loadRazorpayScript();
+      setRazorpayLoaded(loaded);
+      if (!loaded) {
+        toast.error("Could not load payment system. Please try again later.");
+      }
+    };
+    
     const fetchStreamerInfo = async () => {
       if (!channelId) {
         toast.error("Invalid donation link");
@@ -71,9 +80,8 @@ const DonationPage = () => {
         toast.error("Failed to load streamer information");
       }
     };
-
-    // Load Razorpay script on component mount
-    loadRazorpayScript();
+    
+    loadRazorpay();
     
     if (channelId) {
       fetchStreamerInfo();
@@ -86,9 +94,16 @@ const DonationPage = () => {
       return;
     }
 
+    if (!razorpayLoaded) {
+      toast.error("Payment system is not ready. Please refresh the page.");
+      return;
+    }
+
     setIsLoading(true);
     
     try {
+      console.log("Creating donation order with values:", values);
+      
       // Create an order
       const orderResult = await createOrder({
         amount: values.amount,
@@ -103,6 +118,8 @@ const DonationPage = () => {
         return;
       }
 
+      console.log("Order created successfully:", orderResult);
+
       // Process payment with Razorpay
       openRazorpayCheckout(
         orderResult.orderId,
@@ -112,6 +129,12 @@ const DonationPage = () => {
         async (response) => {
           // Handle successful payment
           const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = response;
+          
+          console.log("Payment successful, verifying payment:", {
+            payment_id: razorpay_payment_id,
+            order_id: razorpay_order_id,
+            signature: razorpay_signature
+          });
           
           const verificationResult = await verifyPayment(
             channelId,
@@ -246,11 +269,17 @@ const DonationPage = () => {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading}
+                disabled={isLoading || !razorpayLoaded}
               >
                 <Gift className="mr-2 h-4 w-4" />
                 {isLoading ? "Processing..." : "Donate Now"}
               </Button>
+              
+              {!razorpayLoaded && (
+                <p className="text-center text-sm text-amber-600">
+                  Payment system is loading... Please wait.
+                </p>
+              )}
             </form>
           </Form>
         </CardContent>

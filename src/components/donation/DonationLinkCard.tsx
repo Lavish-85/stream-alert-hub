@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DollarSign, Copy, Check } from "lucide-react";
+import { DollarSign, Copy, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DonationLinkCardProps {
   userId: string;
@@ -13,6 +14,7 @@ interface DonationLinkCardProps {
 
 const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
   
   const donationLink = `${window.location.origin}/donate/${userId}`;
   
@@ -28,6 +30,10 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
       toast.error("Failed to copy link");
     }
   };
+  
+  const openDonationPage = () => {
+    window.open(donationLink, '_blank');
+  };
 
   return (
     <Card className="shadow-md">
@@ -41,19 +47,30 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex space-x-2">
-          <Input 
-            value={donationLink}
-            readOnly
-            className="font-mono text-sm"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className={`min-w-[4rem] ${copied ? 'bg-green-50' : ''}`}
-            onClick={copyToClipboard}
+        <div className="flex flex-col space-y-4">
+          <div className="flex space-x-2">
+            <Input 
+              value={donationLink}
+              readOnly
+              className="font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className={`min-w-[4rem] ${copied ? 'bg-green-50' : ''}`}
+              onClick={copyToClipboard}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          
+          <Button 
+            variant="secondary" 
+            className="w-full"
+            onClick={openDonationPage}
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Test Donation Page
           </Button>
         </div>
       </CardContent>

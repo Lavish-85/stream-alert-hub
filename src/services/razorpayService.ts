@@ -24,6 +24,8 @@ export const createOrder = async (formData: DonationFormData): Promise<CreateOrd
     // In a real implementation, you would get this from Razorpay API
     const tempOrderId = `order_${Date.now()}_${Math.round(Math.random() * 1000000)}`;
     
+    console.log("Creating order with temp ID:", tempOrderId);
+    
     // Create an order in our database
     const { data, error } = await supabase
       .from('orders')
@@ -33,7 +35,7 @@ export const createOrder = async (formData: DonationFormData): Promise<CreateOrd
         message: formData.message || "",
         user_id: formData.channelId,
         status: 'created',
-        razorpay_order_id: tempOrderId // Adding the required field
+        razorpay_order_id: tempOrderId // Ensuring this field is always included
       })
       .select()
       .single();
@@ -42,6 +44,8 @@ export const createOrder = async (formData: DonationFormData): Promise<CreateOrd
       console.error("Error creating order:", error);
       return { error: error.message, orderId: "", amount: 0, orderData: null };
     }
+
+    console.log("Order created successfully:", data);
 
     // Return the order details
     return {
@@ -140,6 +144,8 @@ export const openRazorpayCheckout = (
     return;
   }
   
+  console.log("Opening Razorpay checkout for order:", orderId, "amount:", amount);
+  
   // Razorpay options
   const options = {
     key: 'rzp_test_YOUR_KEY_HERE', // Replace with your Razorpay key (use test key for now)
@@ -150,6 +156,7 @@ export const openRazorpayCheckout = (
     order_id: orderId,
     handler: function(response: any) {
       // Handle successful payment
+      console.log("Payment successful:", response);
       onSuccess(response);
     },
     prefill: {
