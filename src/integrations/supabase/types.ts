@@ -57,54 +57,6 @@ export type Database = {
         }
         Relationships: []
       }
-      donation_page_settings: {
-        Row: {
-          background_image: string | null
-          created_at: string | null
-          custom_thank_you_message: string
-          description: string
-          goal_amount: number
-          id: string
-          primary_color: string
-          secondary_color: string
-          show_donation_goal: boolean
-          show_recent_donors: boolean
-          title: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          background_image?: string | null
-          created_at?: string | null
-          custom_thank_you_message?: string
-          description?: string
-          goal_amount?: number
-          id?: string
-          primary_color?: string
-          secondary_color?: string
-          show_donation_goal?: boolean
-          show_recent_donors?: boolean
-          title?: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          background_image?: string | null
-          created_at?: string | null
-          custom_thank_you_message?: string
-          description?: string
-          goal_amount?: number
-          id?: string
-          primary_color?: string
-          secondary_color?: string
-          show_donation_goal?: boolean
-          show_recent_donors?: boolean
-          title?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       donations: {
         Row: {
           amount: number

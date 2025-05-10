@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -18,9 +17,6 @@ import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
-
-// Create a type-safe way to use the donation_page_settings table
-const donationPageSettingsTable = 'donation_page_settings';
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
@@ -60,25 +56,6 @@ const DonationPage = () => {
     date: string;
     avatarUrl?: string;
   }>>([]);
-  const [pageSettings, setPageSettings] = useState<{
-    title: string;
-    description: string;
-    primary_color: string;
-    secondary_color: string;
-    goal_amount: number;
-    show_donation_goal: boolean;
-    show_recent_donors: boolean;
-    custom_thank_you_message: string;
-  }>({
-    title: "Support My Stream",
-    description: "Your donation will help me create better content!",
-    primary_color: "#8445ff",
-    secondary_color: "#4b1493",
-    goal_amount: 10000,
-    show_donation_goal: true,
-    show_recent_donors: true,
-    custom_thank_you_message: "Thank you for your donation! Your support means the world to me."
-  });
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -135,39 +112,6 @@ const DonationPage = () => {
           });
         }
 
-        // Fetch custom donation page settings
-        // @ts-ignore - The table exists in the database but TypeScript doesn't know about it yet
-        const { data: settings, error: settingsError } = await supabase
-          .from(donationPageSettingsTable)
-          .select('*')
-          .eq('user_id', channelId)
-          .maybeSingle();
-          
-        if (!settingsError && settings) {
-          // Cast settings to the correct type
-          const typedSettings = settings as unknown as {
-            title: string;
-            description: string;
-            primary_color: string;
-            secondary_color: string;
-            goal_amount: number;
-            show_donation_goal: boolean;
-            show_recent_donors: boolean;
-            custom_thank_you_message: string;
-          };
-          
-          setPageSettings({
-            title: typedSettings.title,
-            description: typedSettings.description,
-            primary_color: typedSettings.primary_color,
-            secondary_color: typedSettings.secondary_color,
-            goal_amount: typedSettings.goal_amount,
-            show_donation_goal: typedSettings.show_donation_goal,
-            show_recent_donors: typedSettings.show_recent_donors,
-            custom_thank_you_message: typedSettings.custom_thank_you_message
-          });
-        }
-
         // Fetch donation stats
         const { data: donations, error: donationsError } = await supabase
           .from('donations')
@@ -183,7 +127,7 @@ const DonationPage = () => {
           setDonationStats({
             total,
             supporters: uniqueDonors,
-            goal: settings?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
+            goal: Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
             average
           });
           
@@ -294,7 +238,7 @@ const DonationPage = () => {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
         <Card className="w-full max-w-md shadow-lg animate-fade-in">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold" style={{ color: pageSettings.primary_color }}>
+            <CardTitle className="text-2xl font-bold text-green-600">
               <HandHeart className="mx-auto mb-2 h-12 w-12" />
               Thank You!
             </CardTitle>
@@ -326,7 +270,7 @@ const DonationPage = () => {
               </div>
             </div>
             <p className="text-muted-foreground italic">
-              {pageSettings.custom_thank_you_message}
+              "Your generosity means the world to me!" - {streamerInfo?.name}
             </p>
           </CardContent>
           <CardFooter className="flex justify-center gap-3">
@@ -334,11 +278,7 @@ const DonationPage = () => {
               <Heart className="mr-1 h-4 w-4" />
               Donate Again
             </Button>
-            <Button 
-              onClick={() => navigate("/")} 
-              variant="default"
-              style={{ backgroundColor: pageSettings.primary_color }}
-            >
+            <Button onClick={() => navigate("/")} variant="default">
               Return Home
             </Button>
           </CardFooter>
@@ -384,17 +324,8 @@ const DonationPage = () => {
 
   const progressPercentage = Math.min(100, Math.round((donationStats.total / donationStats.goal) * 100));
 
-  // CSS variables for custom colors
-  const customStyles = {
-    "--primary": pageSettings.primary_color,
-    "--secondary": pageSettings.secondary_color,
-  } as React.CSSProperties;
-
   return (
-    <div 
-      className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4"
-      style={customStyles}
-    >
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
       <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
         {/* Streamer Info Column */}
         <div className="w-full md:w-1/3">
@@ -409,56 +340,42 @@ const DonationPage = () => {
                   <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
                 </div>
                 <CardDescription className="text-center italic">
-                  {pageSettings.description || streamerInfo?.bio}
+                  {streamerInfo?.bio || "Your support helps me create better content!"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {pageSettings.show_donation_goal && (
-                  <div className="space-y-4">
-                    <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-semibold flex items-center">
-                          <DollarSign className="h-4 w-4 mr-1" style={{ color: pageSettings.primary_color }} /> 
-                          Total Donated
-                        </h4>
-                        <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
-                      </div>
-                      <Progress 
-                        value={progressPercentage} 
-                        className="h-2"
-                        style={{
-                          backgroundColor: `${pageSettings.secondary_color}30`
-                        }}
-                      />
-                      <div className="mt-1 text-xs text-right text-muted-foreground">
-                        Goal: ₹{donationStats.goal.toLocaleString()}
-                      </div>
+                <div className="space-y-4">
+                  <div className="bg-white bg-opacity-60 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-semibold flex items-center">
+                        <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
+                        Total Donated
+                      </h4>
+                      <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
                     </div>
-
-                    <div className="flex justify-between">
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Users 
-                            className="h-4 w-4 mr-1" 
-                            style={{ color: pageSettings.secondary_color }} 
-                          />
-                          <span className="text-lg font-bold">{donationStats.supporters}</span>
-                        </div>
-                        <span className="text-xs">Supporters</span>
-                      </div>
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Star 
-                            className="h-4 w-4 mr-1" 
-                            style={{ color: pageSettings.primary_color }}
-                          />
-                          <span className="text-lg font-bold">₹{donationStats.average}</span>
-                        </div>
-                        <span className="text-xs">Average</span>
-                      </div>
+                    <Progress value={progressPercentage} className="h-2" />
+                    <div className="mt-1 text-xs text-right text-muted-foreground">
+                      Goal: ₹{donationStats.goal.toLocaleString()}
                     </div>
                   </div>
-                )}
+
+                  <div className="flex justify-between">
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Users className="h-4 w-4 mr-1 text-blue-600" />
+                        <span className="text-lg font-bold">{donationStats.supporters}</span>
+                      </div>
+                      <span className="text-xs">Supporters</span>
+                    </div>
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Star className="h-4 w-4 mr-1 text-amber-500" />
+                        <span className="text-lg font-bold">₹{donationStats.average}</span>
+                      </div>
+                      <span className="text-xs">Average</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
               <CardFooter className="flex-col">
                 <div className="flex flex-col w-full space-y-2 text-center">
@@ -470,7 +387,7 @@ const DonationPage = () => {
             </Card>
             
             {/* Recent Donors section */}
-            {pageSettings.show_recent_donors && channelId && (
+            {channelId && (
               <RecentDonors 
                 channelId={channelId} 
                 initialDonors={recentDonors} 
@@ -483,16 +400,11 @@ const DonationPage = () => {
         {/* Donation Form Column */}
         <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
           <CardHeader className="text-center">
-            <CardTitle 
-              className="text-2xl font-bold bg-clip-text text-transparent"
-              style={{
-                backgroundImage: `linear-gradient(to right, ${pageSettings.primary_color}, ${pageSettings.secondary_color})`
-              }}
-            >
-              {pageSettings.title}
+            <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-800">
+              Support {streamerInfo?.name || "this Streamer"}
             </CardTitle>
             <CardDescription>
-              {pageSettings.description}
+              Your donation will appear on stream and help support great content
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -587,24 +499,17 @@ const DonationPage = () => {
                     <TooltipTrigger asChild>
                       <Button
                         type="submit"
-                        className="w-full relative overflow-hidden transition-all group"
-                        style={{ 
-                          backgroundColor: pageSettings.primary_color,
-                          backgroundImage: `linear-gradient(to right, ${pageSettings.primary_color}, ${pageSettings.secondary_color})` 
-                        }}
+                        className="w-full relative overflow-hidden transition-all group bg-gradient-to-r from-brand-500 to-brand-700"
                         disabled={isLoading}
                       >
-                        <span className="absolute inset-0 w-full h-full opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{
-                                backgroundImage: `linear-gradient(to right, ${pageSettings.secondary_color}, ${pageSettings.primary_color})`
-                              }}></span>
+                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-brand-600 to-brand-800 opacity-0 group-hover:opacity-100 transition-opacity"></span>
                         <span className="relative flex items-center justify-center">
                           <Gift className="mr-2 h-4 w-4" />
                           {isLoading ? "Processing..." : "Donate Now"}
                         </span>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent className="bg-brand-50 border-brand-100">
                       <p>Your donation will be displayed on stream!</p>
                     </TooltipContent>
                   </Tooltip>
@@ -613,8 +518,8 @@ const DonationPage = () => {
             </Form>
             
             <div className="mt-6 pt-4 border-t border-gray-100">
-              <div style={{ backgroundColor: `${pageSettings.primary_color}10` }} className="p-3 rounded-md">
-                <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: pageSettings.secondary_color }}>
+              <div className="bg-brand-50 p-3 rounded-md">
+                <h4 className="font-semibold text-sm text-brand-800 mb-1 flex items-center">
                   <Heart className="h-3 w-3 mr-1" /> Why donate?
                 </h4>
                 <p className="text-xs text-muted-foreground">
