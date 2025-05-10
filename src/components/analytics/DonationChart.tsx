@@ -14,9 +14,14 @@ import {
 interface DonationChartProps {
   chartData: Array<{ date: string, amount: number, viewers: number }>;
   formatDate: (dateString: string) => string;
+  primaryColor?: string; // Added prop for customization
 }
 
-const DonationChart: React.FC<DonationChartProps> = ({ chartData, formatDate }) => {
+const DonationChart: React.FC<DonationChartProps> = ({ 
+  chartData, 
+  formatDate,
+  primaryColor = "#8445ff" // Default to brand purple if not provided
+}) => {
   return (
     <Card className="mb-6">
       <CardHeader>
@@ -31,8 +36,8 @@ const DonationChart: React.FC<DonationChartProps> = ({ chartData, formatDate }) 
             >
               <defs>
                 <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8445ff" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#8445ff" stopOpacity={0.1}/>
+                  <stop offset="5%" stopColor={primaryColor} stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor={primaryColor} stopOpacity={0.1}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -60,7 +65,7 @@ const DonationChart: React.FC<DonationChartProps> = ({ chartData, formatDate }) 
               <Area 
                 type="monotone" 
                 dataKey="amount" 
-                stroke="#8445ff" 
+                stroke={primaryColor} 
                 fillOpacity={1} 
                 fill="url(#colorAmount)" 
               />
