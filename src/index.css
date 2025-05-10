@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -33,9 +34,6 @@
     --ring: 262 100% 64%;
 
     --radius: 0.5rem;
-    
-    --brand-500: #8445ff;
-    --brand-900: #4b1493;
   }
 
   .dark {
@@ -66,9 +64,6 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 262 100% 64%;
-    
-    --brand-500: #8445ff;
-    --brand-900: #4b1493;
   }
 }
 
@@ -80,11 +75,6 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-}
-
-/* Apply theme colors on load */
-html {
-  color-scheme: light;
 }
 
 .donation-alert {

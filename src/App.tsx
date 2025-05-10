@@ -56,20 +56,19 @@ const App = () => {
                 <Route path="/live-alerts" element={
                   isOBSMode ? <LiveAlertsPage /> : (
                     <ProtectedRoute>
-                      <Layout />
+                      <Layout>
+                        <LiveAlertsPage />
+                      </Layout>
                     </ProtectedRoute>
                   )
                 } />
                 
                 {/* Protected routes with Layout */}
-                <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                  <Route index element={<SetupPage />} />
-                  <Route path="/alerts" element={<AlertsPage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/donation-editor" element={<DonationEditorPage />} />
-                  <Route path="/live-alerts" element={<LiveAlertsPage />} />
-                </Route>
+                <Route path="/" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
+                <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
+                <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
+                <Route path="/donation-editor" element={<ProtectedRoute><Layout><DonationEditorPage /></Layout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
