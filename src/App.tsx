@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import SetupPage from "./pages/SetupPage";
 import AlertsPage from "./pages/AlertsPage";
@@ -17,14 +17,12 @@ import { AuthProvider } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DonationPage from "./pages/DonationPage";
-import DonationCustomizePage from "./pages/DonationCustomizePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 10000, // 10 seconds - short enough to refresh data often
     },
   },
 });
@@ -46,13 +44,10 @@ const App = () => {
                 </>
               )}
               <Routes>
-                {/* Redirect root path to setup page */}
-                <Route path="/" element={<Navigate to="/setup" />} />
-                
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
-                {/* Public donation page with support for both ID and custom URL */}
+                {/* Public donation page */}
                 <Route path="/donate/:channelId" element={<DonationPage />} />
 
                 {/* LiveAlerts route - handles both regular and token-authenticated OBS mode */}
@@ -68,10 +63,9 @@ const App = () => {
                 } />
                 
                 {/* Protected routes with Layout */}
-                <Route path="/setup" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
+                <Route path="/" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
                 <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
-                <Route path="/donation-customize" element={<ProtectedRoute><Layout><DonationCustomizePage /></Layout></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />

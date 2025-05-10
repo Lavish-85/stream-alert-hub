@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
-import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users, Loader2 } from "lucide-react";
+import { DollarSign, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -33,11 +32,9 @@ type DonationFormValues = z.infer<typeof donationFormSchema>;
 
 const DonationPage = () => {
   const { channelId } = useParams<{ channelId: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [streamerInfo, setStreamerInfo] = useState<{ 
-    id?: string;
     name?: string; 
     avatar_url?: string;
     bio?: string;
@@ -45,29 +42,10 @@ const DonationPage = () => {
   const [donationComplete, setDonationComplete] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pageCustomization, setPageCustomization] = useState<{
-    title: string;
-    description: string;
-    thank_you_message: string;
-    goal_amount: number;
-    show_goal: boolean;
-    show_recent_donors: boolean;
-    primary_color: string;
-    secondary_color: string;
-  }>({
-    title: "Support this Creator",
-    description: "Your donation helps create better content!",
-    thank_you_message: "Thank you for your support!",
-    goal_amount: 10000,
-    show_goal: true,
-    show_recent_donors: true,
-    primary_color: "#4F46E5",
-    secondary_color: "#10B981"
-  });
   const [donationStats, setDonationStats] = useState({
     total: 0,
     supporters: 0,
-    goal: 10000,
+    goal: 10000, // Default goal
     average: 0
   });
   const [selectedAmount, setSelectedAmount] = useState<number>(100);
@@ -94,151 +72,105 @@ const DonationPage = () => {
     form.setValue("amount", selectedAmount);
   }, [selectedAmount, form]);
 
-  // Re-fetch streamer info when URL changes (including query params)
+  // Load streamer information
   useEffect(() => {
+    const fetchStreamerInfo = async () => {
+      if (!channelId) {
+        setError("Invalid donation link");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Invalid donation link",
+        });
+        return;
+      }
+
+      try {
+        // Fetch streamer profile
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('display_name, avatar_url, streamer_name')
+          .eq('id', channelId)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Error fetching streamer info:", profileError);
+          setError("Could not find this streamer");
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not find this streamer",
+          });
+          return;
+        }
+
+        if (profile) {
+          setStreamerInfo({
+            name: profile.streamer_name || profile.display_name,
+            avatar_url: profile.avatar_url,
+            bio: "Thank you for supporting my content! Your donations help me create better streams for everyone."
+          });
+        }
+
+        // Fetch donation stats
+        const { data: donations, error: donationsError } = await supabase
+          .from('donations')
+          .select('amount, donor_name, created_at')
+          .eq('user_id', channelId)
+          .order('created_at', { ascending: false });
+
+        if (!donationsError && donations) {
+          const total = donations.reduce((sum, donation) => sum + donation.amount, 0);
+          const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
+          const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
+          
+          setDonationStats({
+            total,
+            supporters: uniqueDonors,
+            goal: Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
+            average
+          });
+          
+          // Process recent donations for the RecentDonors component
+          const recent = donations.slice(0, 5).map(donation => ({
+            id: `${donation.donor_name}-${donation.created_at}`,
+            name: donation.donor_name,
+            amount: donation.amount,
+            date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric'
+            }),
+          }));
+          
+          setRecentDonors(recent);
+        }
+
+      } catch (err) {
+        console.error("Exception fetching streamer info:", err);
+        setError("Failed to load streamer information");
+        toast({
+          variant: "destructive",
+          title: "Error", 
+          description: "Failed to load streamer information",
+        });
+      }
+    };
+    
     if (channelId) {
       fetchStreamerInfo();
     } else {
       setError("Invalid donation link - missing channel ID");
-      setIsLoading(false);
     }
-  }, [channelId, location.search]);
-
-  // Load streamer information
-  const fetchStreamerInfo = async () => {
-    if (!channelId) {
-      setError("Invalid donation link");
-      setIsLoading(false);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Invalid donation link",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // First check if this is a custom URL
-      const { data: customUrlData, error: customUrlError } = await supabase
-        .from('donation_page_settings')
-        .select('user_id')
-        .eq('custom_url', channelId)
-        .maybeSingle();
-        
-      // Get the actual user ID, either from custom URL or direct ID
-      const actualUserId = customUrlData?.user_id || channelId;
-      
-      if (!actualUserId) {
-        setError("Invalid donation link");
-        setIsLoading(false);
-        return;
-      }
-
-      // Fetch streamer profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, display_name, avatar_url, streamer_name')
-        .eq('id', actualUserId)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        console.error("Error fetching streamer info:", profileError);
-        setError("Could not find this streamer");
-        setIsLoading(false);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not find this streamer",
-        });
-        return;
-      }
-
-      // Get page customization
-      const { data: customization, error: customizationError } = await supabase
-        .from('donation_page_settings')
-        .select('*')
-        .eq('user_id', actualUserId)
-        .maybeSingle();
-        
-      if (customization) {
-        setPageCustomization({
-          title: customization.title,
-          description: customization.description,
-          thank_you_message: customization.custom_thank_you_message,
-          goal_amount: customization.goal_amount,
-          show_goal: customization.show_donation_goal,
-          show_recent_donors: customization.show_recent_donors,
-          primary_color: customization.primary_color,
-          secondary_color: customization.secondary_color
-        });
-      }
-
-      if (profile) {
-        setStreamerInfo({
-          id: profile.id,
-          name: profile.streamer_name || profile.display_name,
-          avatar_url: profile.avatar_url,
-          bio: customization?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
-        });
-      }
-
-      // Fetch donation stats
-      const { data: donations, error: donationsError } = await supabase
-        .from('donations')
-        .select('amount, donor_name, created_at')
-        .eq('user_id', actualUserId)
-        .order('created_at', { ascending: false });
-
-      if (!donationsError && donations) {
-        const total = donations.reduce((sum, donation) => sum + Number(donation.amount), 0);
-        const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
-        const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
-        
-        setDonationStats({
-          total,
-          supporters: uniqueDonors,
-          goal: customization?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
-          average
-        });
-        
-        // Process recent donations for the RecentDonors component
-        const recent = donations.slice(0, 5).map(donation => ({
-          id: `${donation.donor_name}-${donation.created_at}`,
-          name: donation.donor_name,
-          amount: Number(donation.amount),
-          date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric'
-          }),
-        }));
-        
-        setRecentDonors(recent);
-      }
-      
-      setIsLoading(false);
-    } catch (err) {
-      console.error("Exception fetching streamer info:", err);
-      setError("Failed to load streamer information");
-      setIsLoading(false);
-      toast({
-        variant: "destructive",
-        title: "Error", 
-        description: "Failed to load streamer information",
-      });
-    }
-  };
+  }, [channelId]);
 
   const onSubmit = async (values: DonationFormValues) => {
-    if (!streamerInfo?.id) {
+    if (!channelId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Invalid donation link - missing streamer ID",
+        description: "Invalid donation link - missing channel ID",
       });
-      setError("Invalid donation link - missing streamer ID");
+      setError("Invalid donation link - missing channel ID");
       return;
     }
 
@@ -258,7 +190,7 @@ const DonationPage = () => {
           amount: values.amount,
           donor_name: values.name,
           message: values.message || "",
-          user_id: streamerInfo.id,
+          user_id: channelId,
           payment_id: paymentId
         });
         
@@ -300,32 +232,14 @@ const DonationPage = () => {
     form.setValue("amount", amount);
   };
 
-  // Apply custom colors from page customization
-  const primaryColor = pageCustomization.primary_color;
-  const secondaryColor = pageCustomization.secondary_color;
-
-  // Show loading state
-  if (isLoading && !error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
-          <h2 className="text-xl font-semibold">Loading donation page...</h2>
-          <p className="text-muted-foreground mt-2">Please wait while we set things up.</p>
-        </div>
-      </div>
-    );
-  }
-
   // Handle donation success page
   if (donationComplete) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4"
-           style={{ background: `linear-gradient(to bottom, ${primaryColor}10, ${secondaryColor}20)` }}>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
         <Card className="w-full max-w-md shadow-lg animate-fade-in">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold" style={{ color: primaryColor }}>
-              <HandHeart className="mx-auto mb-2 h-12 w-12" style={{ color: primaryColor }} />
+            <CardTitle className="text-2xl font-bold text-green-600">
+              <HandHeart className="mx-auto mb-2 h-12 w-12" />
               Thank You!
             </CardTitle>
             <CardDescription>
@@ -346,17 +260,25 @@ const DonationPage = () => {
               </p>
               <div className="w-full max-w-xs mx-auto">
                 <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-4">
-                  <p className="font-medium">{pageCustomization.thank_you_message}</p>
+                  <p className="font-medium">Your donation will:</p>
+                  <ul className="text-sm mt-2 text-left list-disc list-inside">
+                    <li>Appear in their stream shortly</li>
+                    <li>Help them create better content</li>
+                    <li>Support their creative journey</li>
+                  </ul>
                 </div>
               </div>
             </div>
+            <p className="text-muted-foreground italic">
+              "Your generosity means the world to me!" - {streamerInfo?.name}
+            </p>
           </CardContent>
           <CardFooter className="flex justify-center gap-3">
             <Button onClick={() => setDonationComplete(false)} variant="outline">
               <Heart className="mr-1 h-4 w-4" />
               Donate Again
             </Button>
-            <Button onClick={() => navigate("/")} variant="default" style={{ backgroundColor: primaryColor }}>
+            <Button onClick={() => navigate("/")} variant="default">
               Return Home
             </Button>
           </CardFooter>
@@ -393,11 +315,7 @@ const DonationPage = () => {
           </CardContent>
           <CardFooter className="flex justify-center">
             <Button onClick={() => navigate("/")} variant="outline" className="mr-2">Return Home</Button>
-            <Button onClick={() => {
-              setIsLoading(true);
-              setError(null);
-              fetchStreamerInfo();
-            }} variant="default">Try Again</Button>
+            <Button onClick={() => window.location.reload()} variant="default">Try Again</Button>
           </CardFooter>
         </Card>
       </div>
@@ -407,10 +325,7 @@ const DonationPage = () => {
   const progressPercentage = Math.min(100, Math.round((donationStats.total / donationStats.goal) * 100));
 
   return (
-    <div 
-      className="flex min-h-screen items-center justify-center p-4"
-      style={{ background: `linear-gradient(to bottom, ${primaryColor}10, ${secondaryColor}20)` }}
-    >
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
       <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
         {/* Streamer Info Column */}
         <div className="w-full md:w-1/3">
@@ -425,51 +340,42 @@ const DonationPage = () => {
                   <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
                 </div>
                 <CardDescription className="text-center italic">
-                  {streamerInfo?.bio}
+                  {streamerInfo?.bio || "Your support helps me create better content!"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {pageCustomization.show_goal && (
-                  <div className="space-y-4">
-                    <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-semibold flex items-center">
-                          <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
-                          Total Donated
-                        </h4>
-                        <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
-                      </div>
-                      <Progress 
-                        value={progressPercentage} 
-                        className="h-2" 
-                        style={{ 
-                          backgroundColor: `${primaryColor}30`,
-                          "--progress-background": primaryColor
-                        } as React.CSSProperties}
-                      />
-                      <div className="mt-1 text-xs text-right text-muted-foreground">
-                        Goal: ₹{donationStats.goal.toLocaleString()}
-                      </div>
+                <div className="space-y-4">
+                  <div className="bg-white bg-opacity-60 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-semibold flex items-center">
+                        <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
+                        Total Donated
+                      </h4>
+                      <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
                     </div>
-
-                    <div className="flex justify-between">
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Users className="h-4 w-4 mr-1 text-blue-600" />
-                          <span className="text-lg font-bold">{donationStats.supporters}</span>
-                        </div>
-                        <span className="text-xs">Supporters</span>
-                      </div>
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Star className="h-4 w-4 mr-1 text-amber-500" />
-                          <span className="text-lg font-bold">₹{donationStats.average}</span>
-                        </div>
-                        <span className="text-xs">Average</span>
-                      </div>
+                    <Progress value={progressPercentage} className="h-2" />
+                    <div className="mt-1 text-xs text-right text-muted-foreground">
+                      Goal: ₹{donationStats.goal.toLocaleString()}
                     </div>
                   </div>
-                )}
+
+                  <div className="flex justify-between">
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Users className="h-4 w-4 mr-1 text-blue-600" />
+                        <span className="text-lg font-bold">{donationStats.supporters}</span>
+                      </div>
+                      <span className="text-xs">Supporters</span>
+                    </div>
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Star className="h-4 w-4 mr-1 text-amber-500" />
+                        <span className="text-lg font-bold">₹{donationStats.average}</span>
+                      </div>
+                      <span className="text-xs">Average</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
               <CardFooter className="flex-col">
                 <div className="flex flex-col w-full space-y-2 text-center">
@@ -481,9 +387,9 @@ const DonationPage = () => {
             </Card>
             
             {/* Recent Donors section */}
-            {pageCustomization.show_recent_donors && streamerInfo?.id && (
+            {channelId && (
               <RecentDonors 
-                channelId={streamerInfo.id} 
+                channelId={channelId} 
                 initialDonors={recentDonors} 
                 className="animate-fade-in-delayed" 
               />
@@ -494,16 +400,11 @@ const DonationPage = () => {
         {/* Donation Form Column */}
         <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
           <CardHeader className="text-center">
-            <CardTitle 
-              className="text-2xl font-bold bg-clip-text text-transparent"
-              style={{ 
-                backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
-              }}
-            >
-              {pageCustomization.title}
+            <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-800">
+              Support {streamerInfo?.name || "this Streamer"}
             </CardTitle>
             <CardDescription>
-              {pageCustomization.description}
+              Your donation will appear on stream and help support great content
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -536,13 +437,9 @@ const DonationPage = () => {
                         variant={selectedAmount === amount ? "default" : "outline"} 
                         onClick={() => handleAmountSelect(amount)}
                         className={`
-                          ${selectedAmount === amount ? 'ring-2 ring-offset-1' : ''}
+                          ${selectedAmount === amount ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
                           hover:scale-105 transition-transform
                         `}
-                        style={selectedAmount === amount ? { 
-                          backgroundColor: primaryColor,
-                          borderColor: primaryColor
-                        } : {}}
                       >
                         ₹{amount}
                       </Button>
@@ -557,7 +454,7 @@ const DonationPage = () => {
                         <FormLabel className="sr-only">Custom Amount</FormLabel>
                         <FormControl>
                           <div className="relative">
-                            <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                            <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                             <Input
                               type="number"
                               placeholder="Enter custom amount"
@@ -602,19 +499,17 @@ const DonationPage = () => {
                     <TooltipTrigger asChild>
                       <Button
                         type="submit"
-                        className="w-full relative overflow-hidden transition-all group"
-                        style={{ 
-                          background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
-                        }}
+                        className="w-full relative overflow-hidden transition-all group bg-gradient-to-r from-brand-500 to-brand-700"
                         disabled={isLoading}
                       >
+                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-brand-600 to-brand-800 opacity-0 group-hover:opacity-100 transition-opacity"></span>
                         <span className="relative flex items-center justify-center">
                           <Gift className="mr-2 h-4 w-4" />
                           {isLoading ? "Processing..." : "Donate Now"}
                         </span>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent className="bg-brand-50 border-brand-100">
                       <p>Your donation will be displayed on stream!</p>
                     </TooltipContent>
                   </Tooltip>
@@ -623,8 +518,8 @@ const DonationPage = () => {
             </Form>
             
             <div className="mt-6 pt-4 border-t border-gray-100">
-              <div className="p-3 rounded-md" style={{ backgroundColor: `${primaryColor}10` }}>
-                <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: primaryColor }}>
+              <div className="bg-brand-50 p-3 rounded-md">
+                <h4 className="font-semibold text-sm text-brand-800 mb-1 flex items-center">
                   <Heart className="h-3 w-3 mr-1" /> Why donate?
                 </h4>
                 <p className="text-xs text-muted-foreground">
