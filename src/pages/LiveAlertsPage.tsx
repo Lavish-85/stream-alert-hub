@@ -868,3 +868,14 @@ const LiveAlertsPage = () => {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground text-base">
+                Donations will appear here in real-time as they come in.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default LiveAlertsPage;

@@ -1,8 +1,11 @@
 
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Define the allowed animation types for type safety
+export type AnimationType = "fade" | "slide" | "bounce" | "zoom";
 
 export interface AlertStyle {
   id: string;
@@ -11,7 +14,7 @@ export interface AlertStyle {
   background_color: string;
   volume?: number;
   duration: number;
-  animation_type?: "fade" | "slide" | "bounce" | "zoom"; // Fixed animation_type to be a union type
+  animation_type?: AnimationType; // Using the union type
   sound?: string;
   font_family?: string;
   description?: string;
@@ -27,8 +30,8 @@ interface AlertStyleContextType {
   setActiveStyle: (style: AlertStyle) => Promise<void>;
   isLoading: boolean;
   error: Error | null;
-  updateStyleSetting: (style: AlertStyle) => Promise<void>; // Added missing method
-  createStyle: (style: Omit<AlertStyle, 'id' | 'created_at'>) => Promise<void>; // Added missing method
+  updateStyleSetting: (style: AlertStyle) => Promise<void>;
+  createStyle: (style: Omit<AlertStyle, 'id' | 'created_at'>) => Promise<void>;
 }
 
 const AlertStyleContext = React.createContext<AlertStyleContextType | undefined>(undefined);
@@ -101,7 +104,7 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
   }, [user]);
   
   // Helper function to validate animation_type
-  const validateAnimationType = (type?: string): "fade" | "slide" | "bounce" | "zoom" => {
+  const validateAnimationType = (type?: string): AnimationType => {
     if (type === "fade" || type === "slide" || type === "bounce" || type === "zoom") {
       return type;
     }
@@ -117,7 +120,7 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
         background_color: "#4F46E5",
         text_color: "#FFFFFF",
         font_family: "inter",
-        animation_type: "fade" as const,
+        animation_type: "fade" as AnimationType,
         sound: "chime",
         volume: 50,
         duration: 5,
@@ -185,14 +188,14 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       console.log("Style activated successfully");
       
       // Show toast notification about successful update
-      toast("Alert style updated", {
+      toast.success("Alert style updated", {
         description: `Now using "${style.name}" for donation alerts`
       });
       
     } catch (err) {
       console.error('Error updating active style:', err);
       setError(err instanceof Error ? err : new Error('Failed to update active style'));
-      toast("Error updating style", {
+      toast.error("Error updating style", {
         description: "Could not update alert style. Please try again."
       });
     } finally {
@@ -200,7 +203,7 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
   
-  // New method: update style settings
+  // Update style settings
   const updateStyleSetting = async (style: AlertStyle): Promise<void> => {
     try {
       if (!user) throw new Error("User not authenticated");
@@ -242,14 +245,14 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
         prev.map(s => s.id === validatedStyle.id ? validatedStyle : s)
       );
       
-      toast("Style updated", {
+      toast.success("Style updated", {
         description: `"${validatedStyle.name}" settings updated`
       });
       
     } catch (err) {
       console.error('Error updating style settings:', err);
       setError(err instanceof Error ? err : new Error('Failed to update style settings'));
-      toast("Error updating style", {
+      toast.error("Error updating style", {
         description: "Could not update alert style. Please try again."
       });
     } finally {
@@ -257,7 +260,7 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
   
-  // New method: create a new style
+  // Create a new style
   const createStyle = async (styleData: Omit<AlertStyle, 'id' | 'created_at'>): Promise<void> => {
     try {
       if (!user) throw new Error("User not authenticated");
@@ -296,14 +299,14 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
         await setActiveStyle(newStyle);
       }
       
-      toast("New style created", {
+      toast.success("New style created", {
         description: `"${newStyle.name}" has been created`
       });
       
     } catch (err) {
       console.error('Error creating style:', err);
       setError(err instanceof Error ? err : new Error('Failed to create style'));
-      toast("Error creating style", {
+      toast.error("Error creating style", {
         description: "Could not create alert style. Please try again."
       });
     } finally {
