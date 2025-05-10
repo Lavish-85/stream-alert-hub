@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import RecentDonors from "@/components/donation/RecentDonors";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
@@ -49,6 +50,13 @@ const DonationPage = () => {
     average: 0
   });
   const [selectedAmount, setSelectedAmount] = useState<number>(100);
+  const [recentDonors, setRecentDonors] = useState<Array<{
+    id: string;
+    name: string;
+    amount: number;
+    date: string;
+    avatarUrl?: string;
+  }>>([]);
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -82,11 +90,11 @@ const DonationPage = () => {
         // Fetch streamer profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('display_name, avatar_url, streamer_name, bio')
+          .select('display_name, avatar_url, streamer_name')
           .eq('id', channelId)
           .maybeSingle();
 
-        if (profileError || !profile) {
+        if (profileError) {
           console.error("Error fetching streamer info:", profileError);
           setError("Could not find this streamer");
           toast({
@@ -97,17 +105,20 @@ const DonationPage = () => {
           return;
         }
 
-        setStreamerInfo({
-          name: profile.streamer_name || profile.display_name,
-          avatar_url: profile.avatar_url,
-          bio: profile.bio || "Thank you for supporting my content! Your donations help me create better streams for everyone."
-        });
+        if (profile) {
+          setStreamerInfo({
+            name: profile.streamer_name || profile.display_name,
+            avatar_url: profile.avatar_url,
+            bio: "Thank you for supporting my content! Your donations help me create better streams for everyone."
+          });
+        }
 
         // Fetch donation stats
         const { data: donations, error: donationsError } = await supabase
           .from('donations')
-          .select('amount, donor_name')
-          .eq('user_id', channelId);
+          .select('amount, donor_name, created_at')
+          .eq('user_id', channelId)
+          .order('created_at', { ascending: false });
 
         if (!donationsError && donations) {
           const total = donations.reduce((sum, donation) => sum + donation.amount, 0);
@@ -120,6 +131,19 @@ const DonationPage = () => {
             goal: Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
             average
           });
+          
+          // Process recent donations for the RecentDonors component
+          const recent = donations.slice(0, 5).map(donation => ({
+            id: `${donation.donor_name}-${donation.created_at}`,
+            name: donation.donor_name,
+            amount: donation.amount,
+            date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric'
+            }),
+          }));
+          
+          setRecentDonors(recent);
         }
 
       } catch (err) {
@@ -306,61 +330,68 @@ const DonationPage = () => {
       <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
         {/* Streamer Info Column */}
         <div className="w-full md:w-1/3">
-          <Card className="h-full shadow-lg animate-fade-in">
-            <CardHeader className="text-center">
-              <div className="flex flex-col items-center mb-2">
-                <Avatar className="h-20 w-20 mb-2">
-                  <AvatarImage src={streamerInfo?.avatar_url} alt={streamerInfo?.name} />
-                  <AvatarFallback>{streamerInfo?.name?.charAt(0) || '?'}</AvatarFallback>
-                </Avatar>
-                <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
-              </div>
-              <CardDescription className="text-center italic">
-                {streamerInfo?.bio || "Your support helps me create better content!"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-semibold flex items-center">
-                      <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
-                      Total Donated
-                    </h4>
-                    <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
-                  </div>
-                  <Progress value={progressPercentage} className="h-2" />
-                  <div className="mt-1 text-xs text-right text-muted-foreground">
-                    Goal: ₹{donationStats.goal.toLocaleString()}
-                  </div>
+          <div className="space-y-4">
+            <Card className="shadow-lg animate-fade-in">
+              <CardHeader className="text-center">
+                <div className="flex flex-col items-center mb-2">
+                  <Avatar className="h-20 w-20 mb-2">
+                    <AvatarImage src={streamerInfo?.avatar_url} alt={streamerInfo?.name} />
+                    <AvatarFallback>{streamerInfo?.name?.charAt(0) || '?'}</AvatarFallback>
+                  </Avatar>
+                  <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
                 </div>
+                <CardDescription className="text-center italic">
+                  {streamerInfo?.bio || "Your support helps me create better content!"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="bg-white bg-opacity-60 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-semibold flex items-center">
+                        <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
+                        Total Donated
+                      </h4>
+                      <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
+                    </div>
+                    <Progress value={progressPercentage} className="h-2" />
+                    <div className="mt-1 text-xs text-right text-muted-foreground">
+                      Goal: ₹{donationStats.goal.toLocaleString()}
+                    </div>
+                  </div>
 
-                <div className="flex justify-between">
-                  <div className="text-center flex-1">
-                    <div className="flex items-center justify-center">
-                      <Users className="h-4 w-4 mr-1 text-blue-600" />
-                      <span className="text-lg font-bold">{donationStats.supporters}</span>
+                  <div className="flex justify-between">
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Users className="h-4 w-4 mr-1 text-blue-600" />
+                        <span className="text-lg font-bold">{donationStats.supporters}</span>
+                      </div>
+                      <span className="text-xs">Supporters</span>
                     </div>
-                    <span className="text-xs">Supporters</span>
-                  </div>
-                  <div className="text-center flex-1">
-                    <div className="flex items-center justify-center">
-                      <Star className="h-4 w-4 mr-1 text-amber-500" />
-                      <span className="text-lg font-bold">₹{donationStats.average}</span>
+                    <div className="text-center flex-1">
+                      <div className="flex items-center justify-center">
+                        <Star className="h-4 w-4 mr-1 text-amber-500" />
+                        <span className="text-lg font-bold">₹{donationStats.average}</span>
+                      </div>
+                      <span className="text-xs">Average</span>
                     </div>
-                    <span className="text-xs">Average</span>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex-col">
-              <div className="flex flex-col w-full space-y-2 text-center">
-                <p className="text-xs font-medium text-muted-foreground w-full">
-                  Your donation helps {streamerInfo?.name} create quality content
-                </p>
-              </div>
-            </CardFooter>
-          </Card>
+              </CardContent>
+              <CardFooter className="flex-col">
+                <div className="flex flex-col w-full space-y-2 text-center">
+                  <p className="text-xs font-medium text-muted-foreground w-full">
+                    Your donation helps {streamerInfo?.name} create quality content
+                  </p>
+                </div>
+              </CardFooter>
+            </Card>
+            
+            {/* Recent Donors section */}
+            {recentDonors.length > 0 && (
+              <RecentDonors donors={recentDonors} className="animate-fade-in-delayed" />
+            )}
+          </div>
         </div>
 
         {/* Donation Form Column */}
