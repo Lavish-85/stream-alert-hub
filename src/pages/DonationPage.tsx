@@ -9,7 +9,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { DollarSign, Gift, HandHeart, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
@@ -43,21 +43,16 @@ const DonationPage = () => {
     },
   });
 
-  // Load Razorpay script and streamer information
+  // Load streamer information
   useEffect(() => {
-    const loadRazorpay = async () => {
-      const loaded = await loadRazorpayScript();
-      setRazorpayLoaded(loaded);
-      if (!loaded) {
-        setError("Could not load payment system. Please try again later.");
-        toast.error("Could not load payment system. Please try again later.");
-      }
-    };
-    
     const fetchStreamerInfo = async () => {
       if (!channelId) {
         setError("Invalid donation link");
-        toast.error("Invalid donation link");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Invalid donation link",
+        });
         return;
       }
 
@@ -71,7 +66,11 @@ const DonationPage = () => {
         if (error || !data) {
           console.error("Error fetching streamer info:", error);
           setError("Could not find this streamer");
-          toast.error("Could not find this streamer");
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not find this streamer",
+          });
           return;
         }
 
@@ -82,29 +81,29 @@ const DonationPage = () => {
       } catch (err) {
         console.error("Exception fetching streamer info:", err);
         setError("Failed to load streamer information");
-        toast.error("Failed to load streamer information");
+        toast({
+          variant: "destructive",
+          title: "Error", 
+          description: "Failed to load streamer information",
+        });
       }
     };
-    
-    loadRazorpay();
     
     if (channelId) {
       fetchStreamerInfo();
     } else {
       setError("Invalid donation link - missing channel ID");
     }
-  }, [channelId, navigate]);
+  }, [channelId]);
 
   const onSubmit = async (values: DonationFormValues) => {
     if (!channelId) {
-      toast.error("Invalid donation link");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Invalid donation link - missing channel ID",
+      });
       setError("Invalid donation link - missing channel ID");
-      return;
-    }
-
-    if (!razorpayLoaded) {
-      toast.error("Payment system is not ready. Please refresh the page.");
-      setError("Payment system is not ready");
       return;
     }
 
@@ -112,72 +111,50 @@ const DonationPage = () => {
     setError(null);
     
     try {
-      console.log("Creating donation order with values:", values);
+      console.log("Processing donation with values:", values);
       
-      // Create an order
-      const orderResult = await createOrder({
-        amount: values.amount,
-        name: values.name,
-        message: values.message,
-        channelId: channelId
+      // Create an order directly in the database
+      const paymentId = `manual_${Date.now()}_${Math.round(Math.random() * 1000000)}`;
+      
+      // Insert donation record
+      const { error: donationError } = await supabase
+        .from('donations')
+        .insert({
+          amount: values.amount,
+          donor_name: values.name,
+          message: values.message || "",
+          user_id: channelId,
+          payment_id: paymentId
+        });
+        
+      if (donationError) {
+        console.error("Error creating donation:", donationError);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: donationError.message,
+        });
+        setError(`Failed to process donation: ${donationError.message}`);
+        setIsLoading(false);
+        return;
+      }
+
+      // Show success and set donation as complete
+      toast({
+        title: "Thank you for your donation!",
+        description: "Your donation has been received.",
       });
-
-      if (orderResult.error) {
-        console.error("Order creation error:", orderResult.error);
-        toast.error(orderResult.error);
-        setError(`Failed to create order: ${orderResult.error}`);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!orderResult.orderId) {
-        console.error("Missing order ID in order result:", orderResult);
-        toast.error("Failed to generate order ID");
-        setError("Failed to generate order ID");
-        setIsLoading(false);
-        return;
-      }
-
-      console.log("Order created successfully:", orderResult);
-
-      // Process payment with Razorpay
-      openRazorpayCheckout(
-        orderResult.orderId,
-        orderResult.amount,
-        values.name,
-        channelId,
-        async (response) => {
-          // Handle successful payment
-          const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = response;
-          
-          console.log("Payment successful, verifying payment:", {
-            payment_id: razorpay_payment_id,
-            order_id: razorpay_order_id,
-            signature: razorpay_signature
-          });
-          
-          const verificationResult = await verifyPayment(
-            channelId,
-            razorpay_payment_id,
-            razorpay_order_id,
-            razorpay_signature
-          );
-
-          if (verificationResult.success) {
-            toast.success("Thank you for your donation!");
-            setDonationComplete(true);
-          } else {
-            setError(verificationResult.error || "Payment verification failed");
-            toast.error(verificationResult.error || "Payment verification failed");
-          }
-          
-          setIsLoading(false);
-        }
-      );
+      setDonationComplete(true);
+      
+      setIsLoading(false);
     } catch (err) {
       console.error("Exception processing donation:", err);
       const errorMessage = err instanceof Error ? err.message : "Failed to process donation";
-      toast.error(errorMessage);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      });
       setError(errorMessage);
       setIsLoading(false);
     }
@@ -327,17 +304,11 @@ const DonationPage = () => {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !razorpayLoaded}
+                disabled={isLoading}
               >
                 <Gift className="mr-2 h-4 w-4" />
                 {isLoading ? "Processing..." : "Donate Now"}
               </Button>
-              
-              {!razorpayLoaded && (
-                <p className="text-center text-sm text-amber-600">
-                  Payment system is loading... Please wait.
-                </p>
-              )}
             </form>
           </Form>
         </CardContent>
