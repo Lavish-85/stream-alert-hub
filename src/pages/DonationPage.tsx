@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,6 +32,7 @@ type DonationFormValues = z.infer<typeof donationFormSchema>;
 
 const DonationPage = () => {
   const { channelId } = useParams<{ channelId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [streamerInfo, setStreamerInfo] = useState<{ 
@@ -106,6 +107,7 @@ const DonationPage = () => {
       }
 
       try {
+        setIsLoading(true);
         // First check if this is a custom URL
         const { data: customUrlData, error: customUrlError } = await supabase
           .from('donation_page_settings')
@@ -200,7 +202,6 @@ const DonationPage = () => {
           
           setRecentDonors(recent);
         }
-
       } catch (err) {
         console.error("Exception fetching streamer info:", err);
         setError("Failed to load streamer information");
@@ -209,6 +210,8 @@ const DonationPage = () => {
           title: "Error", 
           description: "Failed to load streamer information",
         });
+      } finally {
+        setIsLoading(false);
       }
     };
     
@@ -217,7 +220,7 @@ const DonationPage = () => {
     } else {
       setError("Invalid donation link - missing channel ID");
     }
-  }, [channelId]);
+  }, [channelId, location.search]); // Added location.search to refresh when query params change
 
   const onSubmit = async (values: DonationFormValues) => {
     if (!streamerInfo?.id) {
@@ -382,231 +385,238 @@ const DonationPage = () => {
       className="flex min-h-screen items-center justify-center p-4"
       style={{ background: `linear-gradient(to bottom, ${primaryColor}10, ${secondaryColor}20)` }}
     >
-      <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
-        {/* Streamer Info Column */}
-        <div className="w-full md:w-1/3">
-          <div className="space-y-4">
-            <Card className="shadow-lg animate-fade-in">
-              <CardHeader className="text-center">
-                <div className="flex flex-col items-center mb-2">
-                  <Avatar className="h-20 w-20 mb-2">
-                    <AvatarImage src={streamerInfo?.avatar_url} alt={streamerInfo?.name} />
-                    <AvatarFallback>{streamerInfo?.name?.charAt(0) || '?'}</AvatarFallback>
-                  </Avatar>
-                  <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
-                </div>
-                <CardDescription className="text-center italic">
-                  {streamerInfo?.bio}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {pageCustomization.show_goal && (
-                  <div className="space-y-4">
-                    <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-semibold flex items-center">
-                          <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
-                          Total Donated
-                        </h4>
-                        <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
-                      </div>
-                      <Progress 
-                        value={progressPercentage} 
-                        className="h-2" 
-                        style={{ 
-                          backgroundColor: `${primaryColor}30`,
-                          "--progress-background": primaryColor
-                        } as React.CSSProperties}
-                      />
-                      <div className="mt-1 text-xs text-right text-muted-foreground">
-                        Goal: ₹{donationStats.goal.toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Users className="h-4 w-4 mr-1 text-blue-600" />
-                          <span className="text-lg font-bold">{donationStats.supporters}</span>
-                        </div>
-                        <span className="text-xs">Supporters</span>
-                      </div>
-                      <div className="text-center flex-1">
-                        <div className="flex items-center justify-center">
-                          <Star className="h-4 w-4 mr-1 text-amber-500" />
-                          <span className="text-lg font-bold">₹{donationStats.average}</span>
-                        </div>
-                        <span className="text-xs">Average</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex-col">
-                <div className="flex flex-col w-full space-y-2 text-center">
-                  <p className="text-xs font-medium text-muted-foreground w-full">
-                    Your donation helps {streamerInfo?.name} create quality content
-                  </p>
-                </div>
-              </CardFooter>
-            </Card>
-            
-            {/* Recent Donors section */}
-            {pageCustomization.show_recent_donors && streamerInfo?.id && (
-              <RecentDonors 
-                channelId={streamerInfo.id} 
-                initialDonors={recentDonors} 
-                className="animate-fade-in-delayed" 
-              />
-            )}
-          </div>
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center p-8">
+          <div className="animate-spin h-12 w-12 rounded-full border-4 border-t-primary"></div>
+          <p className="mt-4 text-muted-foreground">Loading donation page...</p>
         </div>
-
-        {/* Donation Form Column */}
-        <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
-          <CardHeader className="text-center">
-            <CardTitle 
-              className="text-2xl font-bold bg-clip-text text-transparent"
-              style={{ 
-                backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
-              }}
-            >
-              {pageCustomization.title}
-            </CardTitle>
-            <CardDescription>
-              {pageCustomization.description}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Your Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter your name" {...field} />
-                      </FormControl>
-                      <FormDescription>
-                        This name will be shown with your donation
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="space-y-2">
-                  <FormLabel>Donation Amount (INR)</FormLabel>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
-                    {SUGGESTED_AMOUNTS.map(amount => (
-                      <Button 
-                        key={amount} 
-                        type="button"
-                        variant={selectedAmount === amount ? "default" : "outline"} 
-                        onClick={() => handleAmountSelect(amount)}
-                        className={`
-                          ${selectedAmount === amount ? 'ring-2 ring-offset-1' : ''}
-                          hover:scale-105 transition-transform
-                        `}
-                        style={selectedAmount === amount ? { 
-                          backgroundColor: primaryColor,
-                          borderColor: primaryColor
-                        } : {}}
-                      >
-                        ₹{amount}
-                      </Button>
-                    ))}
+      ) : (
+        <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
+          {/* Streamer Info Column */}
+          <div className="w-full md:w-1/3">
+            <div className="space-y-4">
+              <Card className="shadow-lg animate-fade-in">
+                <CardHeader className="text-center">
+                  <div className="flex flex-col items-center mb-2">
+                    <Avatar className="h-20 w-20 mb-2">
+                      <AvatarImage src={streamerInfo?.avatar_url} alt={streamerInfo?.name} />
+                      <AvatarFallback>{streamerInfo?.name?.charAt(0) || '?'}</AvatarFallback>
+                    </Avatar>
+                    <CardTitle className="text-xl">{streamerInfo?.name}</CardTitle>
                   </div>
-                  
+                  <CardDescription className="text-center italic">
+                    {streamerInfo?.bio}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {pageCustomization.show_goal && (
+                    <div className="space-y-4">
+                      <div className="bg-white bg-opacity-60 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-sm font-semibold flex items-center">
+                            <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
+                            Total Donated
+                          </h4>
+                          <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
+                        </div>
+                        <Progress 
+                          value={progressPercentage} 
+                          className="h-2" 
+                          style={{ 
+                            backgroundColor: `${primaryColor}30`,
+                            "--progress-background": primaryColor
+                          } as React.CSSProperties}
+                        />
+                        <div className="mt-1 text-xs text-right text-muted-foreground">
+                          Goal: ₹{donationStats.goal.toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <div className="text-center flex-1">
+                          <div className="flex items-center justify-center">
+                            <Users className="h-4 w-4 mr-1 text-blue-600" />
+                            <span className="text-lg font-bold">{donationStats.supporters}</span>
+                          </div>
+                          <span className="text-xs">Supporters</span>
+                        </div>
+                        <div className="text-center flex-1">
+                          <div className="flex items-center justify-center">
+                            <Star className="h-4 w-4 mr-1 text-amber-500" />
+                            <span className="text-lg font-bold">₹{donationStats.average}</span>
+                          </div>
+                          <span className="text-xs">Average</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="flex-col">
+                  <div className="flex flex-col w-full space-y-2 text-center">
+                    <p className="text-xs font-medium text-muted-foreground w-full">
+                      Your donation helps {streamerInfo?.name} create quality content
+                    </p>
+                  </div>
+                </CardFooter>
+              </Card>
+              
+              {/* Recent Donors section */}
+              {pageCustomization.show_recent_donors && streamerInfo?.id && (
+                <RecentDonors 
+                  channelId={streamerInfo.id} 
+                  initialDonors={recentDonors} 
+                  className="animate-fade-in-delayed" 
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Donation Form Column */}
+          <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
+            <CardHeader className="text-center">
+              <CardTitle 
+                className="text-2xl font-bold bg-clip-text text-transparent"
+                style={{ 
+                  backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
+                }}
+              >
+                {pageCustomization.title}
+              </CardTitle>
+              <CardDescription>
+                {pageCustomization.description}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                   <FormField
                     control={form.control}
-                    name="amount"
+                    name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="sr-only">Custom Amount</FormLabel>
+                        <FormLabel>Your Name</FormLabel>
                         <FormControl>
-                          <div className="relative">
-                            <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                            <Input
-                              type="number"
-                              placeholder="Enter custom amount"
-                              className="pl-10"
-                              {...field}
-                              onChange={(e) => {
-                                field.onChange(e);
-                                setSelectedAmount(parseInt(e.target.value) || 0);
-                              }}
-                            />
-                          </div>
+                          <Input placeholder="Enter your name" {...field} />
                         </FormControl>
+                        <FormDescription>
+                          This name will be shown with your donation
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  
+                  <div className="space-y-2">
+                    <FormLabel>Donation Amount (INR)</FormLabel>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      {SUGGESTED_AMOUNTS.map(amount => (
+                        <Button 
+                          key={amount} 
+                          type="button"
+                          variant={selectedAmount === amount ? "default" : "outline"} 
+                          onClick={() => handleAmountSelect(amount)}
+                          className={`
+                            ${selectedAmount === amount ? 'ring-2 ring-offset-1' : ''}
+                            hover:scale-105 transition-transform
+                          `}
+                          style={selectedAmount === amount ? { 
+                            backgroundColor: primaryColor,
+                            borderColor: primaryColor
+                          } : {}}
+                        >
+                          ₹{amount}
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name="amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="sr-only">Custom Amount</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                              <Input
+                                type="number"
+                                placeholder="Enter custom amount"
+                                className="pl-10"
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  setSelectedAmount(parseInt(e.target.value) || 0);
+                                }}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="message"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Message (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Add a message for the streamer"
+                            className="resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Your message will be displayed with your donation
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="submit"
+                          className="w-full relative overflow-hidden transition-all group"
+                          style={{ 
+                            background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
+                          }}
+                          disabled={isLoading}
+                        >
+                          <span className="relative flex items-center justify-center">
+                            <Gift className="mr-2 h-4 w-4" />
+                            {isLoading ? "Processing..." : "Donate Now"}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Your donation will be displayed on stream!</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </form>
+              </Form>
+              
+              <div className="mt-6 pt-4 border-t border-gray-100">
+                <div className="p-3 rounded-md" style={{ backgroundColor: `${primaryColor}10` }}>
+                  <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: primaryColor }}>
+                    <Heart className="h-3 w-3 mr-1" /> Why donate?
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Your donation helps {streamerInfo?.name} create better content, improve stream quality,
+                    and continue entertaining viewers like you. Every contribution makes a difference!
+                  </p>
                 </div>
-                
-                <FormField
-                  control={form.control}
-                  name="message"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Message (Optional)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Add a message for the streamer"
-                          className="resize-none"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Your message will be displayed with your donation
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="submit"
-                        className="w-full relative overflow-hidden transition-all group"
-                        style={{ 
-                          background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
-                        }}
-                        disabled={isLoading}
-                      >
-                        <span className="relative flex items-center justify-center">
-                          <Gift className="mr-2 h-4 w-4" />
-                          {isLoading ? "Processing..." : "Donate Now"}
-                        </span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Your donation will be displayed on stream!</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </form>
-            </Form>
-            
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <div className="p-3 rounded-md" style={{ backgroundColor: `${primaryColor}10` }}>
-                <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: primaryColor }}>
-                  <Heart className="h-3 w-3 mr-1" /> Why donate?
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Your donation helps {streamerInfo?.name} create better content, improve stream quality,
-                  and continue entertaining viewers like you. Every contribution makes a difference!
-                </p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

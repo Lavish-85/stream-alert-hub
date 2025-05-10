@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { IndianRupee, Copy, Check, ExternalLink } from "lucide-react";
+import { IndianRupee, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,37 +14,48 @@ interface DonationLinkCardProps {
 
 const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const [copied, setCopied] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const [customUrl, setCustomUrl] = useState<string | null>(null);
   
   // Ensure we have a valid user ID, falling back to the provided userId prop
   const effectiveUserId = user?.id || userId;
   
+  // Add a timestamp parameter for cache-busting
+  const timestamp = Date.now();
+  
   // Fetch custom URL if available
-  useEffect(() => {
-    if (effectiveUserId) {
-      const fetchCustomUrl = async () => {
-        const { data, error } = await supabase
-          .from('donation_page_settings')
-          .select('custom_url')
-          .eq('user_id', effectiveUserId)
-          .maybeSingle();
-          
-        if (!error && data && data.custom_url) {
-          setCustomUrl(data.custom_url);
-        }
-      };
-      
-      fetchCustomUrl();
+  const fetchCustomUrl = async () => {
+    if (!effectiveUserId) return;
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('donation_page_settings')
+        .select('custom_url')
+        .eq('user_id', effectiveUserId)
+        .maybeSingle();
+        
+      if (!error && data && data.custom_url) {
+        setCustomUrl(data.custom_url);
+      }
+    } catch (err) {
+      console.error("Error fetching custom URL:", err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+  
+  useEffect(() => {
+    fetchCustomUrl();
   }, [effectiveUserId]);
   
-  // Make sure we have a valid donation link with the appropriate identifier
+  // Make sure we have a valid donation link with the appropriate identifier and cache-busting
   const donationLink = customUrl 
-    ? `${window.location.origin}/donate/${customUrl}` 
+    ? `${window.location.origin}/donate/${customUrl}?t=${timestamp}` 
     : effectiveUserId 
-      ? `${window.location.origin}/donate/${effectiveUserId}` 
-      : `${window.location.origin}/donate/your-channel-id`;
+      ? `${window.location.origin}/donate/${effectiveUserId}?t=${timestamp}` 
+      : `${window.location.origin}/donate/your-channel-id?t=${timestamp}`;
   
   const copyToClipboard = async () => {
     try {
@@ -66,6 +77,11 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
       return;
     }
     window.open(donationLink, '_blank');
+  };
+
+  const refreshLink = () => {
+    fetchCustomUrl();
+    toast.success("Link refreshed");
   };
 
   return (
@@ -97,15 +113,27 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             </Button>
           </div>
           
-          <Button 
-            variant="secondary" 
-            className="w-full"
-            onClick={openDonationPage}
-            disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Preview Donation Page
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="secondary" 
+              className="w-full"
+              onClick={openDonationPage}
+              disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Preview Donation Page
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={refreshLink}
+              className="flex-shrink-0"
+              title="Refresh link"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
           
           {((!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl) && (
             <p className="text-sm text-amber-600">
