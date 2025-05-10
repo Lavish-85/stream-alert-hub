@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { IndianRupee, Copy, Check, ExternalLink } from "lucide-react";
+import { IndianRupee, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ interface DonationLinkCardProps {
 
 const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const [copied, setCopied] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const [customUrl, setCustomUrl] = useState<string | null>(null);
   
@@ -21,34 +22,52 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
   const effectiveUserId = user?.id || userId;
   
   // Fetch custom URL if available
-  useEffect(() => {
-    if (effectiveUserId) {
-      const fetchCustomUrl = async () => {
-        const { data, error } = await supabase
-          .from('donation_page_settings')
-          .select('custom_url')
-          .eq('user_id', effectiveUserId)
-          .maybeSingle();
-          
-        if (!error && data && data.custom_url) {
-          setCustomUrl(data.custom_url);
-        }
-      };
-      
-      fetchCustomUrl();
+  const fetchCustomUrl = async () => {
+    if (!effectiveUserId) return;
+    
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('donation_page_settings')
+        .select('custom_url')
+        .eq('user_id', effectiveUserId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Error fetching custom URL:", error);
+        toast.error("Failed to load donation link");
+        return;
+      }
+        
+      if (data && data.custom_url) {
+        setCustomUrl(data.custom_url);
+      } else {
+        setCustomUrl(null);
+      }
+    } catch (err) {
+      console.error("Exception fetching custom URL:", err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+  
+  // Fetch on component mount and when effectiveUserId changes
+  useEffect(() => {
+    fetchCustomUrl();
   }, [effectiveUserId]);
   
   // Make sure we have a valid donation link with the appropriate identifier
   const donationLink = customUrl 
-    ? `${window.location.origin}/donate/${customUrl}` 
+    ? `${window.location.origin}/donate/${customUrl}?t=${Date.now()}` 
     : effectiveUserId 
-      ? `${window.location.origin}/donate/${effectiveUserId}` 
-      : `${window.location.origin}/donate/your-channel-id`;
+      ? `${window.location.origin}/donate/${effectiveUserId}?t=${Date.now()}` 
+      : `${window.location.origin}/donate/your-channel-id?t=${Date.now()}`;
   
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(donationLink);
+      // Remove cache-busting parameter when copying to clipboard
+      const cleanLink = donationLink.split('?')[0];
+      await navigator.clipboard.writeText(cleanLink);
       setCopied(true);
       toast.success("Donation link copied to clipboard!");
       
@@ -68,6 +87,11 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
     window.open(donationLink, '_blank');
   };
 
+  const handleRefresh = () => {
+    fetchCustomUrl();
+    toast.info("Refreshing donation link...");
+  };
+
   return (
     <Card className="shadow-md">
       <CardHeader>
@@ -83,7 +107,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
         <div className="flex flex-col space-y-4">
           <div className="flex space-x-2">
             <Input 
-              value={donationLink}
+              value={donationLink.split('?')[0]} // Remove cache-busting from displayed URL
               readOnly
               className="font-mono text-sm"
             />
@@ -97,15 +121,27 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             </Button>
           </div>
           
-          <Button 
-            variant="secondary" 
-            className="w-full"
-            onClick={openDonationPage}
-            disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Preview Donation Page
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="secondary" 
+              className="w-full"
+              onClick={openDonationPage}
+              disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Preview Donation Page
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="flex-shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
           
           {((!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl) && (
             <p className="text-sm text-amber-600">

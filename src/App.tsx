@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import SetupPage from "./pages/SetupPage";
 import AlertsPage from "./pages/AlertsPage";
@@ -45,6 +45,9 @@ const App = () => {
                 </>
               )}
               <Routes>
+                {/* Redirect root path to setup page */}
+                <Route path="/" element={<Navigate to="/setup" />} />
+                
                 {/* Public auth route */}
                 <Route path="/auth" element={<AuthPage />} />
 
@@ -64,7 +67,7 @@ const App = () => {
                 } />
                 
                 {/* Protected routes with Layout */}
-                <Route path="/" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
+                <Route path="/setup" element={<ProtectedRoute><Layout><SetupPage /></Layout></ProtectedRoute>} />
                 <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
                 <Route path="/donation-customize" element={<ProtectedRoute><Layout><DonationCustomizePage /></Layout></ProtectedRoute>} />

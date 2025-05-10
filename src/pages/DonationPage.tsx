@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
-import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
+import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,8 +33,9 @@ type DonationFormValues = z.infer<typeof donationFormSchema>;
 
 const DonationPage = () => {
   const { channelId } = useParams<{ channelId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [streamerInfo, setStreamerInfo] = useState<{ 
     id?: string;
     name?: string; 
@@ -92,132 +94,142 @@ const DonationPage = () => {
     form.setValue("amount", selectedAmount);
   }, [selectedAmount, form]);
 
-  // Load streamer information
+  // Re-fetch streamer info when URL changes (including query params)
   useEffect(() => {
-    const fetchStreamerInfo = async () => {
-      if (!channelId) {
-        setError("Invalid donation link");
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Invalid donation link",
-        });
-        return;
-      }
-
-      try {
-        // First check if this is a custom URL
-        const { data: customUrlData, error: customUrlError } = await supabase
-          .from('donation_page_settings')
-          .select('user_id')
-          .eq('custom_url', channelId)
-          .maybeSingle();
-          
-        // Get the actual user ID, either from custom URL or direct ID
-        const actualUserId = customUrlData?.user_id || channelId;
-        
-        if (!actualUserId) {
-          setError("Invalid donation link");
-          return;
-        }
-
-        // Fetch streamer profile
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, display_name, avatar_url, streamer_name')
-          .eq('id', actualUserId)
-          .maybeSingle();
-
-        if (profileError || !profile) {
-          console.error("Error fetching streamer info:", profileError);
-          setError("Could not find this streamer");
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not find this streamer",
-          });
-          return;
-        }
-
-        // Get page customization
-        const { data: customization, error: customizationError } = await supabase
-          .from('donation_page_settings')
-          .select('*')
-          .eq('user_id', actualUserId)
-          .maybeSingle();
-          
-        if (customization) {
-          setPageCustomization({
-            title: customization.title,
-            description: customization.description,
-            thank_you_message: customization.custom_thank_you_message,
-            goal_amount: customization.goal_amount,
-            show_goal: customization.show_donation_goal,
-            show_recent_donors: customization.show_recent_donors,
-            primary_color: customization.primary_color,
-            secondary_color: customization.secondary_color
-          });
-        }
-
-        if (profile) {
-          setStreamerInfo({
-            id: profile.id,
-            name: profile.streamer_name || profile.display_name,
-            avatar_url: profile.avatar_url,
-            bio: customization?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
-          });
-        }
-
-        // Fetch donation stats
-        const { data: donations, error: donationsError } = await supabase
-          .from('donations')
-          .select('amount, donor_name, created_at')
-          .eq('user_id', actualUserId)
-          .order('created_at', { ascending: false });
-
-        if (!donationsError && donations) {
-          const total = donations.reduce((sum, donation) => sum + donation.amount, 0);
-          const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
-          const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
-          
-          setDonationStats({
-            total,
-            supporters: uniqueDonors,
-            goal: customization?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
-            average
-          });
-          
-          // Process recent donations for the RecentDonors component
-          const recent = donations.slice(0, 5).map(donation => ({
-            id: `${donation.donor_name}-${donation.created_at}`,
-            name: donation.donor_name,
-            amount: donation.amount,
-            date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric'
-            }),
-          }));
-          
-          setRecentDonors(recent);
-        }
-
-      } catch (err) {
-        console.error("Exception fetching streamer info:", err);
-        setError("Failed to load streamer information");
-        toast({
-          variant: "destructive",
-          title: "Error", 
-          description: "Failed to load streamer information",
-        });
-      }
-    };
-    
     if (channelId) {
       fetchStreamerInfo();
     } else {
       setError("Invalid donation link - missing channel ID");
+      setIsLoading(false);
     }
-  }, [channelId]);
+  }, [channelId, location.search]);
+
+  // Load streamer information
+  const fetchStreamerInfo = async () => {
+    if (!channelId) {
+      setError("Invalid donation link");
+      setIsLoading(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Invalid donation link",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // First check if this is a custom URL
+      const { data: customUrlData, error: customUrlError } = await supabase
+        .from('donation_page_settings')
+        .select('user_id')
+        .eq('custom_url', channelId)
+        .maybeSingle();
+        
+      // Get the actual user ID, either from custom URL or direct ID
+      const actualUserId = customUrlData?.user_id || channelId;
+      
+      if (!actualUserId) {
+        setError("Invalid donation link");
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch streamer profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, streamer_name')
+        .eq('id', actualUserId)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        console.error("Error fetching streamer info:", profileError);
+        setError("Could not find this streamer");
+        setIsLoading(false);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Could not find this streamer",
+        });
+        return;
+      }
+
+      // Get page customization
+      const { data: customization, error: customizationError } = await supabase
+        .from('donation_page_settings')
+        .select('*')
+        .eq('user_id', actualUserId)
+        .maybeSingle();
+        
+      if (customization) {
+        setPageCustomization({
+          title: customization.title,
+          description: customization.description,
+          thank_you_message: customization.custom_thank_you_message,
+          goal_amount: customization.goal_amount,
+          show_goal: customization.show_donation_goal,
+          show_recent_donors: customization.show_recent_donors,
+          primary_color: customization.primary_color,
+          secondary_color: customization.secondary_color
+        });
+      }
+
+      if (profile) {
+        setStreamerInfo({
+          id: profile.id,
+          name: profile.streamer_name || profile.display_name,
+          avatar_url: profile.avatar_url,
+          bio: customization?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
+        });
+      }
+
+      // Fetch donation stats
+      const { data: donations, error: donationsError } = await supabase
+        .from('donations')
+        .select('amount, donor_name, created_at')
+        .eq('user_id', actualUserId)
+        .order('created_at', { ascending: false });
+
+      if (!donationsError && donations) {
+        const total = donations.reduce((sum, donation) => sum + Number(donation.amount), 0);
+        const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
+        const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
+        
+        setDonationStats({
+          total,
+          supporters: uniqueDonors,
+          goal: customization?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
+          average
+        });
+        
+        // Process recent donations for the RecentDonors component
+        const recent = donations.slice(0, 5).map(donation => ({
+          id: `${donation.donor_name}-${donation.created_at}`,
+          name: donation.donor_name,
+          amount: Number(donation.amount),
+          date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric'
+          }),
+        }));
+        
+        setRecentDonors(recent);
+      }
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Exception fetching streamer info:", err);
+      setError("Failed to load streamer information");
+      setIsLoading(false);
+      toast({
+        variant: "destructive",
+        title: "Error", 
+        description: "Failed to load streamer information",
+      });
+    }
+  };
 
   const onSubmit = async (values: DonationFormValues) => {
     if (!streamerInfo?.id) {
@@ -291,6 +303,19 @@ const DonationPage = () => {
   // Apply custom colors from page customization
   const primaryColor = pageCustomization.primary_color;
   const secondaryColor = pageCustomization.secondary_color;
+
+  // Show loading state
+  if (isLoading && !error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+          <h2 className="text-xl font-semibold">Loading donation page...</h2>
+          <p className="text-muted-foreground mt-2">Please wait while we set things up.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Handle donation success page
   if (donationComplete) {
@@ -368,7 +393,11 @@ const DonationPage = () => {
           </CardContent>
           <CardFooter className="flex justify-center">
             <Button onClick={() => navigate("/")} variant="outline" className="mr-2">Return Home</Button>
-            <Button onClick={() => window.location.reload()} variant="default">Try Again</Button>
+            <Button onClick={() => {
+              setIsLoading(true);
+              setError(null);
+              fetchStreamerInfo();
+            }} variant="default">Try Again</Button>
           </CardFooter>
         </Card>
       </div>
