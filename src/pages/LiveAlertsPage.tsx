@@ -1,10 +1,14 @@
+
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Bell, AlertTriangle, RefreshCw, Wifi, WifiOff, Settings } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAlertStyle, AlertStyle } from "@/contexts/AlertStyleContext";
@@ -12,7 +16,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { sendTestAlert, getWebSocketUrl, createAlertWebSocket, testWebSocketConnection } from "@/utils/obsUtils";
 
 // Define the donation type based on our Supabase schema
-// Add clientId as an optional property to handle the temporary IDs
 interface Donation {
   id: number;
   payment_id: string;
@@ -30,7 +33,8 @@ const LiveAlertsPage = () => {
   const [lastAlert, setLastAlert] = useState<Donation | null>(null);
   const [showOBSInstructions, setShowOBSInstructions] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const { activeStyle, isLoading: styleLoading } = useAlertStyle();
+  const [showPopups, setShowPopups] = useState(true);
+  const { activeStyle, isLoading: styleLoading, updateStyleSetting } = useAlertStyle();
   const { user } = useAuth();
   
   // WebSocket references
@@ -42,6 +46,13 @@ const LiveAlertsPage = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const isOBSMode = urlParams.get('obs') === 'true';
   const channelId = urlParams.get('channel');
+  
+  // Load popup preference on mount
+  useEffect(() => {
+    if (activeStyle) {
+      setShowPopups(activeStyle.show_popup !== false); // Default to true if not defined
+    }
+  }, [activeStyle]);
   
   // Format amount as Indian Rupees
   const formatIndianRupees = (amount: number) => {
@@ -68,6 +79,25 @@ const LiveAlertsPage = () => {
           `client-${donation.clientId}` : 
           `temp-${donation.donor_name}-${donation.amount}-${donation.created_at || new Date().toISOString()}`;
   }, []);
+
+  // Toggle popup setting
+  const handleTogglePopups = async (value: boolean) => {
+    setShowPopups(value);
+    
+    // Save setting to AlertStyle if we have an active style
+    if (activeStyle && updateStyleSetting) {
+      try {
+        await updateStyleSetting({
+          ...activeStyle,
+          show_popup: value
+        });
+        toast.success(`Popup alerts ${value ? 'enabled' : 'disabled'}`);
+      } catch (err) {
+        console.error("Failed to save popup setting:", err);
+        toast.error("Failed to save setting");
+      }
+    }
+  };
 
   // WebSocket setup for OBS alerts with improved reconnection logic
   useEffect(() => {
@@ -446,7 +476,7 @@ const LiveAlertsPage = () => {
     }
   };
 
-  // Function to manually reconnect WebSocket with improved reliability
+  // Function to manually reconnect WebSocket
   const handleReconnect = () => {
     if (wsRef.current) {
       console.log("Manually closing WebSocket for reconnection");
@@ -521,10 +551,12 @@ const LiveAlertsPage = () => {
       text_color: "#111827",
       font_family: "system-ui",
       animation_type: "fade",
-      duration: 5
+      duration: 5,
+      show_popup: true
     });
     
     const alertStyle = activeStyle || getFallbackStyle();
+    const shouldShowPopup = alertStyle.show_popup !== false; // Default to true if not defined
     
     return (
       <div className="obs-container" style={{ 
@@ -560,7 +592,7 @@ const LiveAlertsPage = () => {
           </div>
         )}
         
-        {lastAlert && (
+        {shouldShowPopup && lastAlert && (
           <div 
             key={getDonationUniqueId(lastAlert)}
             className={`donation-alert fixed bottom-10 right-10 p-0 max-w-md w-full ${getAnimationClass()}`}
@@ -642,6 +674,36 @@ const LiveAlertsPage = () => {
               <RefreshCw className="h-3 w-3" /> Reconnect
             </Button>
           )}
+          
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="flex items-center gap-1"
+              >
+                <Settings className="h-3 w-3" /> Display Options
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-4">
+                <h4 className="font-medium">Alert Settings</h4>
+                <div className="flex items-center justify-between space-x-2">
+                  <Label htmlFor="show-popups" className="flex-grow">
+                    Show popup notifications
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Display alerts in the bottom right corner of the screen
+                    </p>
+                  </Label>
+                  <Switch
+                    id="show-popups"
+                    checked={showPopups}
+                    onCheckedChange={handleTogglePopups}
+                  />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
           
           <button
             onClick={() => setShowOBSInstructions(!showOBSInstructions)}
@@ -734,8 +796,42 @@ const LiveAlertsPage = () => {
         </Card>
       )}
 
-      {/* Alert Display */}
-      <div className="grid gap-6">
+      {/* Alert Display with Popup Feature */}
+      <div className="grid gap-6 relative">
+        {/* Popup alert (in dashboard) */}
+        {showPopups && lastAlert && !isOBSMode && (
+          <div 
+            key={`popup-${getDonationUniqueId(lastAlert)}`}
+            className={`fixed bottom-6 right-6 z-50 max-w-md w-full ${getAnimationClass()}`}
+          >
+            <Alert 
+              className={cn(
+                "border-2 shadow-lg",
+                isTestDonation(lastAlert.payment_id) ? "border-blue-300 bg-blue-50" : "border-primary/20 bg-card"
+              )}
+            >
+              <Bell className="h-6 w-6" />
+              <div className="w-full">
+                <div className="flex justify-between items-start">
+                  <AlertTitle className="font-semibold text-lg">
+                    {isTestDonation(lastAlert.payment_id) && <span className="text-blue-500 font-normal text-sm mr-1">(Test)</span>}
+                    {lastAlert.donor_name} donated {formatIndianRupees(lastAlert.amount)}
+                  </AlertTitle>
+                  <button 
+                    onClick={() => setLastAlert(null)} 
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <AlertDescription className="mt-2 text-base">
+                  {lastAlert.message || "No message"}
+                </AlertDescription>
+              </div>
+            </Alert>
+          </div>
+        )}
+
         {alerts.length > 0 ? (
           alerts.map((donation) => (
             <Alert 

@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
@@ -7,16 +6,18 @@ import { useAuth } from "@/contexts/AuthContext";
 export interface AlertStyle {
   id: string;
   name: string;
-  description: string | null;
-  background_color: string;
   text_color: string;
-  font_family: string | null;
-  animation_type: string | null;
-  sound: string | null;
-  volume: number | null;
-  duration: number | null;
-  is_active: boolean | null;
-  user_id: string | null;
+  background_color: string;
+  volume?: number;
+  duration: number;
+  animation_type?: "fade" | "slide" | "bounce" | "zoom";
+  sound?: string;
+  font_family?: string;
+  description?: string;
+  is_active?: boolean;
+  user_id?: string;
+  created_at?: string;
+  show_popup?: boolean; // Add this property
 }
 
 interface AlertStyleContextType {

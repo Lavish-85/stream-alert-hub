@@ -53,7 +53,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
           Donation Link
         </CardTitle>
         <CardDescription>
-          Share this link with your viewers so they can donate to you
+          Share this link with your viewers so they can donate directly via UPI
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -81,7 +81,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             disabled={!effectiveUserId || effectiveUserId === 'your-channel-id'}
           >
             <ExternalLink className="mr-2 h-4 w-4" />
-            Test Donation Page
+            Preview Donation Page
           </Button>
           
           {(!effectiveUserId || effectiveUserId === 'your-channel-id') && (
@@ -93,7 +93,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground">
-          Donations will be processed through Razorpay and show up on your alerts stream.
+          Donations will be processed through UPI and show up on your alerts stream.
         </p>
       </CardFooter>
     </Card>

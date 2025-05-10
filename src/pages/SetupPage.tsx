@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -26,6 +27,7 @@ import {
   AlertTriangle,
   Wifi,
   WifiOff,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendTestAlert, getOBSUrl, checkUserHasToken, getWebSocketUrl } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import DonationLinkCard from "@/components/donation/DonationLinkCard";
 
 const SetupPage = () => {
   const { toast } = useToast();
@@ -47,12 +50,16 @@ const SetupPage = () => {
   const [obsUrl, setObsUrl] = useState<string>("");
   const [wsConnectionStatus, setWsConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [wsRef, setWsRef] = useState<WebSocket | null>(null);
+  const [donationPageUrl, setDonationPageUrl] = useState<string>("");
 
   useEffect(() => {
     // Generate OBS URL when user is available
     if (user) {
       const url = `${window.location.origin}/live-alerts?obs=true&channel=${user.id}`;
       setObsUrl(url);
+      
+      // Set donation page URL
+      setDonationPageUrl(`${window.location.origin}/donate/${user.id}`);
       
       // Test WebSocket connection
       testWebSocketConnection(user.id);
@@ -162,7 +169,6 @@ const SetupPage = () => {
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!validateUpiId()) return;
-      // Skip to step 3 (previously step 2 was KYC)
       setCurrentStep(2);
     } else {
       setCurrentStep(currentStep + 1);
@@ -211,6 +217,19 @@ const SetupPage = () => {
     } finally {
       setIsTestingConnection(false);
     }
+  };
+
+  const openDonationPage = () => {
+    if (!user?.id) {
+      toast({
+        title: "Not available",
+        description: "You need to be logged in to preview the donation page.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    window.open(donationPageUrl, '_blank');
   };
 
   return (
@@ -291,8 +310,9 @@ const SetupPage = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               <Tabs defaultValue="qr-code" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="qr-code">QR Code</TabsTrigger>
+                  <TabsTrigger value="donation-page">Donation Page</TabsTrigger>
                   <TabsTrigger value="obs-link">OBS Browser Source</TabsTrigger>
                 </TabsList>
                 <TabsContent value="qr-code" className="space-y-4 pt-4">
@@ -326,12 +346,75 @@ const SetupPage = () => {
                     </p>
                   </div>
                 </TabsContent>
+                
+                <TabsContent value="donation-page" className="space-y-4 pt-4">
+                  <Alert variant="default" className="bg-blue-50 border-blue-200">
+                    <ExternalLink className="h-5 w-5 text-blue-600" />
+                    <AlertTitle className="text-blue-800">Web Donation Page</AlertTitle>
+                    <AlertDescription className="text-blue-700">
+                      Share this donation page with your viewers for a seamless donation experience directly through a web browser.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="donation-page-url">Donation Page URL:</Label>
+                    <div className="flex">
+                      <Input
+                        id="donation-page-url"
+                        value={donationPageUrl || "Loading..."}
+                        readOnly
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="ml-2"
+                        onClick={() => {
+                          if (donationPageUrl) {
+                            handleCopy(donationPageUrl, "Donation page URL copied to clipboard");
+                          } else {
+                            toast({
+                              title: "Error",
+                              description: "URL not available yet. Please wait.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        disabled={!donationPageUrl}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This URL directs your viewers to a customized donation page where they can easily contribute
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={openDonationPage}
+                    disabled={!user?.id}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Preview Donation Page
+                  </Button>
+                  
+                  {/* Show example of the donation page as a card or image */}
+                  {user?.id && (
+                    <div className="mt-6 border rounded-lg p-4">
+                      <h3 className="font-medium mb-2">Donation Page Preview</h3>
+                      <DonationLinkCard userId={user.id} />
+                    </div>
+                  )}
+                </TabsContent>
+                
                 <TabsContent value="obs-link" className="space-y-4 pt-4">
                   <Alert variant="default" className="bg-blue-50 border-blue-200">
                     <Wifi className="h-5 w-5 text-blue-600" />
-                    <AlertTitle className="text-blue-800">New WebSocket Connection System</AlertTitle>
+                    <AlertTitle className="text-blue-800">WebSocket Connection System</AlertTitle>
                     <AlertDescription className="text-blue-700">
-                      We've upgraded to a more reliable WebSocket-based alert system. Copy and use the new URL below in your OBS browser source.
+                      We've upgraded to a more reliable WebSocket-based alert system. Copy and use the URL below in your OBS browser source.
                     </AlertDescription>
                   </Alert>
 
@@ -485,6 +568,7 @@ const SetupPage = () => {
                 <h4 className="font-semibold">Next Steps:</h4>
                 <ul className="space-y-2 mt-2 list-disc list-inside text-sm">
                   <li>Share your UPI link or QR code with viewers</li>
+                  <li>Share your donation page URL with viewers</li>
                   <li>Customize your alert appearance in the "Alerts" tab</li>
                   <li>Track donations in the "Analytics" tab</li>
                 </ul>
