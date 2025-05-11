@@ -17,6 +17,7 @@ import { z } from "zod";
 import { Loader2, Save, Palette } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 // Form schema for donation page settings
 const donationPageSchema = z.object({
@@ -64,9 +65,9 @@ const DonationCustomizePage = () => {
       try {
         console.log("Fetching donation page settings for user:", user.id);
         
-        // Check if we have settings in the donation_settings table
+        // Check if we have settings in the donation_page_settings table (corrected from donation_settings)
         const { data, error } = await supabase
-          .from('donation_settings')
+          .from('donation_page_settings')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
@@ -79,27 +80,27 @@ const DonationCustomizePage = () => {
         if (data) {
           console.log("Found donation settings:", data);
           
-          // Update form with existing settings
+          // Update form with existing settings - mapping database column names to form field names
           form.reset({
             customUrl: data.custom_url || "",
-            pageTitle: data.page_title || "",
-            bio: data.bio || "",
+            pageTitle: data.title || "", // Correctly mapping to 'title' from DB
+            bio: data.description || "", // Correctly mapping to 'description' from DB
             goalAmount: data.goal_amount || 10000,
-            showGoal: data.show_goal ?? true,
+            showGoal: data.show_donation_goal ?? true, // Correctly mapping to 'show_donation_goal' from DB
             showRecentDonors: data.show_recent_donors ?? true,
             primaryColor: data.primary_color || "#9b87f5",
-            accentColor: data.accent_color || "#7E69AB"
+            accentColor: data.secondary_color || "#7E69AB" // Correctly mapping to 'secondary_color' from DB
           });
           
           setExistingSettings({
             customUrl: data.custom_url || "",
-            pageTitle: data.page_title || "",
-            bio: data.bio || "",
+            pageTitle: data.title || "",
+            bio: data.description || "",
             goalAmount: data.goal_amount || 10000,
-            showGoal: data.show_goal ?? true,
+            showGoal: data.show_donation_goal ?? true,
             showRecentDonors: data.show_recent_donors ?? true,
             primaryColor: data.primary_color || "#9b87f5",
-            accentColor: data.accent_color || "#7E69AB"
+            accentColor: data.secondary_color || "#7E69AB"
           });
         } else {
           console.log("No existing donation settings found");
@@ -130,7 +131,7 @@ const DonationCustomizePage = () => {
       
       // Check if custom URL is already taken (except by the current user)
       const { data: existingUrl, error: urlCheckError } = await supabase
-        .from('donation_settings')
+        .from('donation_page_settings')
         .select('user_id')
         .eq('custom_url', values.customUrl)
         .neq('user_id', user.id);
@@ -149,19 +150,20 @@ const DonationCustomizePage = () => {
         return;
       }
       
-      // Save to donation_settings table - upsert (update or insert)
+      // Save to donation_page_settings table - upsert (update or insert)
+      // Map form field names to database column names
       const { error } = await supabase
-        .from('donation_settings')
+        .from('donation_page_settings')
         .upsert({
           user_id: user.id,
           custom_url: values.customUrl,
-          page_title: values.pageTitle || null,
-          bio: values.bio || null,
+          title: values.pageTitle || 'Support My Stream', // Map pageTitle to title
+          description: values.bio || null, // Map bio to description
           goal_amount: values.goalAmount || 10000,
-          show_goal: values.showGoal,
+          show_donation_goal: values.showGoal, // Map showGoal to show_donation_goal
           show_recent_donors: values.showRecentDonors,
           primary_color: values.primaryColor || "#9b87f5",
-          accent_color: values.accentColor || "#7E69AB",
+          secondary_color: values.accentColor || "#7E69AB", // Map accentColor to secondary_color
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
         
@@ -555,3 +557,4 @@ const DonationCustomizePage = () => {
 };
 
 export default DonationCustomizePage;
+

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -92,9 +91,9 @@ const DonationPage = () => {
         // First try to find by custom URL
         let userId = channelId;
         
-        // Check if this is a custom URL
+        // Check if this is a custom URL - using the correct table name: donation_page_settings
         const { data: customUrlData, error: customUrlError } = await supabase
-          .from('donation_settings')
+          .from('donation_page_settings')
           .select('user_id')
           .ilike('custom_url', channelId)
           .maybeSingle();
@@ -127,17 +126,17 @@ const DonationPage = () => {
         if (profile) {
           console.log("Found streamer profile:", profile);
           
-          // Also fetch additional settings
+          // Also fetch additional settings - using the correct table name
           const { data: donationSettings } = await supabase
-            .from('donation_settings')
-            .select('bio, page_title, goal_amount, show_goal, show_recent_donors')
+            .from('donation_page_settings')
+            .select('description, title, goal_amount, show_donation_goal, show_recent_donors')
             .eq('user_id', userId)
             .maybeSingle();
             
           setStreamerInfo({
-            name: donationSettings?.page_title || profile.streamer_name || profile.display_name,
+            name: donationSettings?.title || profile.streamer_name || profile.display_name,
             avatar_url: profile.avatar_url,
-            bio: donationSettings?.bio || "Thank you for supporting my content! Your donations help me create better streams for everyone."
+            bio: donationSettings?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
           });
           
           // Update goal if we have custom settings
