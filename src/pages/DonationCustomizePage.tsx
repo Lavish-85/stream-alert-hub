@@ -65,7 +65,7 @@ const DonationCustomizePage = () => {
       try {
         console.log("Fetching donation page settings for user:", user.id);
         
-        // Check if we have settings in the donation_page_settings table (corrected from donation_settings)
+        // Check if we have settings in the donation_page_settings table
         const { data, error } = await supabase
           .from('donation_page_settings')
           .select('*')
@@ -150,25 +150,55 @@ const DonationCustomizePage = () => {
         return;
       }
       
-      // Save to donation_page_settings table - upsert (update or insert)
-      // Map form field names to database column names
-      const { error } = await supabase
+      // First, check if a record exists for this user
+      const { data: existingRecord, error: checkError } = await supabase
         .from('donation_page_settings')
-        .upsert({
-          user_id: user.id,
-          custom_url: values.customUrl,
-          title: values.pageTitle || 'Support My Stream', // Map pageTitle to title
-          description: values.bio || null, // Map bio to description
-          goal_amount: values.goalAmount || 10000,
-          show_donation_goal: values.showGoal, // Map showGoal to show_donation_goal
-          show_recent_donors: values.showRecentDonors,
-          primary_color: values.primaryColor || "#9b87f5",
-          secondary_color: values.accentColor || "#7E69AB", // Map accentColor to secondary_color
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
         
-      if (error) {
-        throw new Error(`Error saving settings: ${error.message}`);
+      if (checkError) {
+        throw new Error(`Error checking existing record: ${checkError.message}`);
+      }
+      
+      let result;
+      
+      if (existingRecord) {
+        // Update existing record
+        result = await supabase
+          .from('donation_page_settings')
+          .update({
+            custom_url: values.customUrl,
+            title: values.pageTitle || 'Support My Stream',
+            description: values.bio || null,
+            goal_amount: values.goalAmount || 10000,
+            show_donation_goal: values.showGoal,
+            show_recent_donors: values.showRecentDonors,
+            primary_color: values.primaryColor || "#9b87f5",
+            secondary_color: values.accentColor || "#7E69AB",
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', user.id);
+      } else {
+        // Insert new record
+        result = await supabase
+          .from('donation_page_settings')
+          .insert({
+            user_id: user.id,
+            custom_url: values.customUrl,
+            title: values.pageTitle || 'Support My Stream',
+            description: values.bio || null,
+            goal_amount: values.goalAmount || 10000,
+            show_donation_goal: values.showGoal,
+            show_recent_donors: values.showRecentDonors,
+            primary_color: values.primaryColor || "#9b87f5",
+            secondary_color: values.accentColor || "#7E69AB",
+            updated_at: new Date().toISOString()
+          });
+      }
+        
+      if (result.error) {
+        throw new Error(`Error saving settings: ${result.error.message}`);
       }
       
       toast({
@@ -557,4 +587,3 @@ const DonationCustomizePage = () => {
 };
 
 export default DonationCustomizePage;
-
