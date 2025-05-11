@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Card,
@@ -19,6 +20,7 @@ import {
   Speaker,
   Type,
   Brush,
+  Play,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
@@ -28,6 +30,8 @@ import { useAlertStyle } from "@/contexts/AlertStyleContext";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import AlertPreview from "@/components/alerts/AlertPreview";
+import { sendTestAlert } from "@/utils/obsUtils";
 
 const AlertsPage = () => {
   const { toast } = useToast();
@@ -150,6 +154,31 @@ const AlertsPage = () => {
       }
     }
   };
+  
+  const testAlert = async () => {
+    try {
+      const { error } = await sendTestAlert();
+      if (error) {
+        toast({
+          title: "Test failed",
+          description: "Failed to send test alert.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Test alert sent",
+          description: "Check your OBS browser source to see the alert.",
+        });
+      }
+    } catch (err) {
+      console.error("Error sending test alert:", err);
+      toast({
+        title: "Test failed",
+        description: "Failed to send test alert.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const animationOptions = [
     { value: "fade", label: "Fade" },
@@ -170,161 +199,199 @@ const AlertsPage = () => {
         </p>
       </div>
 
-      <Card className="bg-muted/50">
-        <CardHeader>
-          <CardTitle>Alert Style Settings</CardTitle>
-          <CardDescription>
-            Adjust the appearance and behavior of your alerts
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading settings...
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Style Name</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={form.name}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Stream V1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center">
-                  <AlignLeft className="mr-2 h-4 w-4" />
-                  Alert Text Color
-                </Label>
-                <ColorPicker
-                  color={form.text_color}
-                  onChange={handleColorChange("text_color")}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center">
-                  <Palette className="mr-2 h-4 w-4" />
-                  Background Color
-                </Label>
-                <ColorPicker
-                  color={form.background_color}
-                  onChange={handleColorChange("background_color")}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center">
-                  <Speaker className="mr-2 h-4 w-4" />
-                  Alert Volume
-                </Label>
-                <Slider
-                  defaultValue={[form.volume]}
-                  max={100}
-                  step={1}
-                  onValueChange={(value) => handleSliderChange(value, "volume")}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Adjust the volume of the alert sound.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center">
-                  <Brush className="mr-2 h-4 w-4" />
-                  Alert Duration
-                </Label>
-                <Slider
-                  defaultValue={[form.duration]}
-                  max={15}
-                  step={1}
-                  onValueChange={(value) => handleSliderChange(value, "duration")}
-                />
-                <p className="text-sm text-muted-foreground">
-                  How long the alert should display on screen (in seconds).
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center">
-                  <Type className="mr-2 h-4 w-4" />
-                  Font Family
-                </Label>
-                <Input
-                  id="font_family"
-                  name="font_family"
-                  value={form.font_family}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Arial, sans-serif"
-                />
-                <p className="text-sm text-muted-foreground">
-                  The font family to use for the alert text.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Animation Type</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {animationOptions.map((option) => (
-                    <Button
-                      key={option.value}
-                      variant={form.animation_type === option.value ? "default" : "outline"}
-                      onClick={() => setForm({ ...form, animation_type: option.value as "fade" | "slide" | "bounce" | "zoom" })}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Select the animation style for the alert.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="show-popup"
-                    checked={form.show_popup !== false} // Default to true if undefined
-                    onCheckedChange={(checked) => {
-                      // Update local form state
-                      setForm({
-                        ...form,
-                        show_popup: checked === true
-                      });
-                    }}
-                  />
-                  <Label htmlFor="show-popup" className="font-medium text-sm">
-                    Show alert popups
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Display donation alerts as popups in the bottom-right corner
-                </p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-        <div className="p-4 flex justify-end">
-          <Button onClick={handleSave} disabled={isLoading}>
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="bg-muted/50">
+          <CardHeader>
+            <CardTitle>Alert Style Settings</CardTitle>
+            <CardDescription>
+              Adjust the appearance and behavior of your alerts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
             {isLoading ? (
-              <>
+              <div className="flex items-center justify-center">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
+                Loading settings...
+              </div>
             ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Style Name</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={form.name}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Stream V1"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <AlignLeft className="mr-2 h-4 w-4" />
+                    Alert Text Color
+                  </Label>
+                  <ColorPicker
+                    color={form.text_color}
+                    onChange={handleColorChange("text_color")}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <Palette className="mr-2 h-4 w-4" />
+                    Background Color
+                  </Label>
+                  <ColorPicker
+                    color={form.background_color}
+                    onChange={handleColorChange("background_color")}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <Speaker className="mr-2 h-4 w-4" />
+                    Alert Volume
+                  </Label>
+                  <Slider
+                    defaultValue={[form.volume]}
+                    max={100}
+                    step={1}
+                    onValueChange={(value) => handleSliderChange(value, "volume")}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Adjust the volume of the alert sound.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <Brush className="mr-2 h-4 w-4" />
+                    Alert Duration
+                  </Label>
+                  <Slider
+                    defaultValue={[form.duration]}
+                    max={15}
+                    step={1}
+                    onValueChange={(value) => handleSliderChange(value, "duration")}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    How long the alert should display on screen (in seconds).
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center">
+                    <Type className="mr-2 h-4 w-4" />
+                    Font Family
+                  </Label>
+                  <Input
+                    id="font_family"
+                    name="font_family"
+                    value={form.font_family}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Arial, sans-serif"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    The font family to use for the alert text.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Animation Type</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {animationOptions.map((option) => (
+                      <Button
+                        key={option.value}
+                        variant={form.animation_type === option.value ? "default" : "outline"}
+                        onClick={() => setForm({ ...form, animation_type: option.value as "fade" | "slide" | "bounce" | "zoom" })}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Select the animation style for the alert.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="show-popup"
+                      checked={form.show_popup !== false} // Default to true if undefined
+                      onCheckedChange={(checked) => {
+                        // Update local form state
+                        setForm({
+                          ...form,
+                          show_popup: checked === true
+                        });
+                      }}
+                    />
+                    <Label htmlFor="show-popup" className="font-medium text-sm">
+                      Show alert popups
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground pl-6">
+                    Display donation alerts as popups in the bottom-right corner
+                  </p>
+                </div>
+                
+                <div className="pt-4">
+                  <Button onClick={handleSave} disabled={isLoading} className="w-full">
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             )}
-          </Button>
+          </CardContent>
+        </Card>
+        
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Alert Preview</CardTitle>
+              <CardDescription>
+                See how your alerts will look in real-time
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <AlertPreview 
+                textColor={form.text_color}
+                backgroundColor={form.background_color}
+                animationType={form.animation_type}
+                fontFamily={form.font_family}
+              />
+              
+              <Button 
+                variant="secondary" 
+                className="w-full"
+                onClick={testAlert}
+              >
+                <Play className="mr-2 h-4 w-4" />
+                Send Test Alert
+              </Button>
+            </CardContent>
+          </Card>
+          
+          <Alert>
+            <AlertTitle>Tip: Alert Customization</AlertTitle>
+            <AlertDescription>
+              Try different combinations of colors, animations, and font styles to find what best matches your stream's branding.
+            </AlertDescription>
+          </Alert>
         </div>
-      </Card>
+      </div>
     </div>
   );
 };

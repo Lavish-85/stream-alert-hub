@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -20,31 +19,28 @@ import {
   ArrowRight,
   CheckCircle2,
   Copy,
-  FileUp,
-  QrCode,
   RefreshCw,
   XCircle,
   AlertTriangle,
   Wifi,
   WifiOff,
   ExternalLink,
+  Settings,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { sendTestAlert, getOBSUrl, checkUserHasToken, getWebSocketUrl } from "@/utils/obsUtils";
+import { sendTestAlert, getWebSocketUrl } from "@/utils/obsUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import DonationLinkCard from "@/components/donation/DonationLinkCard";
+import { Link } from "react-router-dom";
 
 const SetupPage = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
-  const [upiId, setUpiId] = useState("");
-  const [upiIdError, setUpiIdError] = useState("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
   const [obsUrl, setObsUrl] = useState<string>("");
@@ -152,27 +148,8 @@ const SetupPage = () => {
     }
   };
 
-  const validateUpiId = () => {
-    const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z]+$/;
-    if (!upiId) {
-      setUpiIdError("UPI VPA is required");
-      return false;
-    }
-    if (!regex.test(upiId)) {
-      setUpiIdError("Invalid UPI VPA format (e.g. username@upi)");
-      return false;
-    }
-    setUpiIdError("");
-    return true;
-  };
-
   const handleNextStep = () => {
-    if (currentStep === 1) {
-      if (!validateUpiId()) return;
-      setCurrentStep(2);
-    } else {
-      setCurrentStep(currentStep + 1);
-    }
+    setCurrentStep(currentStep + 1);
   };
 
   const handleCopy = async (text: string, message: string) => {
@@ -240,50 +217,16 @@ const SetupPage = () => {
       </p>
       
       <div className="mb-8">
-        <Progress value={(currentStep / 3) * 100} className="h-2" />
+        <Progress value={(currentStep / 2) * 100} className="h-2" />
         <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-          <span>UPI Setup</span>
           <span>Generate Links</span>
           <span>Test</span>
         </div>
       </div>
 
       <div className="space-y-8">
-        {/* Step 1: UPI Setup */}
+        {/* Step 1: Generate Links */}
         {currentStep === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Enter your UPI VPA</CardTitle>
-              <CardDescription>
-                We'll use this to generate payment links and QR codes for your viewers
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="upi-id">UPI Virtual Payment Address</Label>
-                <Input
-                  id="upi-id"
-                  placeholder="yourname@upi"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  className={upiIdError ? "border-red-400" : ""}
-                />
-                {upiIdError && (
-                  <p className="text-sm font-medium text-red-500">{upiIdError}</p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  Example: yourname@paytm, yourname@ybl, yourname@okicici
-                </p>
-              </div>
-              <Button onClick={handleNextStep} className="w-full sm:w-auto">
-                Continue <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 2: Generate Links */}
-        {currentStep === 2 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -309,43 +252,11 @@ const SetupPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <Tabs defaultValue="qr-code" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="qr-code">QR Code</TabsTrigger>
+              <Tabs defaultValue="donation-page" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="donation-page">Donation Page</TabsTrigger>
                   <TabsTrigger value="obs-link">OBS Browser Source</TabsTrigger>
                 </TabsList>
-                <TabsContent value="qr-code" className="space-y-4 pt-4">
-                  <div className="mx-auto w-48 h-48 bg-white p-2 border">
-                    <div className="w-full h-full flex items-center justify-center bg-muted/20">
-                      <QrCode className="w-24 h-24 text-black" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="payment-link">Payment Link</Label>
-                    <div className="flex">
-                      <Input
-                        id="payment-link"
-                        value={`upi://pay?pa=${upiId}&pn=StreamDonate&cu=INR`}
-                        readOnly
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="ml-2"
-                        onClick={() => handleCopy(
-                          `upi://pay?pa=${upiId}&pn=StreamDonate&cu=INR`,
-                          "Payment link copied to clipboard"
-                        )}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Share this link or QR code with your viewers to accept donations
-                    </p>
-                  </div>
-                </TabsContent>
                 
                 <TabsContent value="donation-page" className="space-y-4 pt-4">
                   <Alert variant="default" className="bg-blue-50 border-blue-200">
@@ -390,15 +301,27 @@ const SetupPage = () => {
                     </p>
                   </div>
 
-                  <Button
-                    variant="secondary"
-                    className="w-full"
-                    onClick={openDonationPage}
-                    disabled={!user?.id}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Preview Donation Page
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={openDonationPage}
+                      disabled={!user?.id}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Preview Donation Page
+                    </Button>
+                    
+                    <Button 
+                      variant="outline"
+                      className="flex-1"
+                      as={Link}
+                      to="/donation-customize"
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      Customize Donation Page
+                    </Button>
+                  </div>
                   
                   {/* Show example of the donation page as a card or image */}
                   {user?.id && (
@@ -505,8 +428,8 @@ const SetupPage = () => {
           </Card>
         )}
 
-        {/* Step 3: Connection Test */}
-        {currentStep === 3 && (
+        {/* Step 2: Connection Test */}
+        {currentStep === 2 && (
           <Card>
             <CardHeader>
               <CardTitle>Connection Test</CardTitle>
@@ -567,7 +490,6 @@ const SetupPage = () => {
               <div className="bg-muted p-4 rounded-lg">
                 <h4 className="font-semibold">Next Steps:</h4>
                 <ul className="space-y-2 mt-2 list-disc list-inside text-sm">
-                  <li>Share your UPI link or QR code with viewers</li>
                   <li>Share your donation page URL with viewers</li>
                   <li>Customize your alert appearance in the "Alerts" tab</li>
                   <li>Track donations in the "Analytics" tab</li>
