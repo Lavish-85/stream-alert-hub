@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -89,6 +88,8 @@ const DonationPage = () => {
       }
 
       try {
+        console.log("Fetching streamer info for channel ID:", channelId);
+        
         // First check if this is a custom URL
         let userId = channelId;
         
@@ -96,7 +97,7 @@ const DonationPage = () => {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         
         if (!uuidRegex.test(channelId)) {
-          console.log("Using custom URL:", channelId);
+          console.log("Looking up custom URL:", channelId);
           // This is a custom URL, need to find the actual user ID
           const { data: urlData, error: urlError } = await supabase
             .from('donation_page_settings')
@@ -104,14 +105,16 @@ const DonationPage = () => {
             .eq('custom_url', channelId)
             .maybeSingle();
           
-          if (urlError || !urlData?.user_id) {
-            console.error("Error finding user with custom URL:", urlError || "No user ID found");
-            setError("Could not find this streamer");
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: "Invalid custom donation URL",
-            });
+          if (urlError) {
+            console.error("Error finding user with custom URL:", urlError);
+            setError("Could not find this streamer - URL lookup error");
+            setIsLoading(false);
+            return;
+          }
+          
+          if (!urlData || !urlData.user_id) {
+            console.error("No user found with custom URL:", channelId);
+            setError("Could not find this streamer - Invalid custom URL");
             setIsLoading(false);
             return;
           }
@@ -120,6 +123,8 @@ const DonationPage = () => {
           console.log("Found user ID from custom URL:", userId);
         }
 
+        console.log("Looking up profile for user ID:", userId);
+        
         // Fetch streamer profile with the determined user ID
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -129,27 +134,19 @@ const DonationPage = () => {
 
         if (profileError) {
           console.error("Error fetching streamer profile:", profileError);
-          setError("Could not find this streamer");
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not find this streamer profile",
-          });
+          setError("Could not find this streamer - Profile lookup error");
           setIsLoading(false);
           return;
         }
 
         if (!profile) {
           console.error("No profile found for user ID:", userId);
-          setError("Streamer not found");
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Streamer profile not found",
-          });
+          setError("Streamer profile not found");
           setIsLoading(false);
           return;
         }
+
+        console.log("Found profile:", profile);
 
         // Fetch donation page settings
         const { data: settings, error: settingsError } = await supabase
@@ -162,9 +159,6 @@ const DonationPage = () => {
           console.error("Error fetching page settings:", settingsError);
         }
         
-        console.log("Fetched settings:", settings);
-        console.log("Fetched profile:", profile);
-
         // Set streamer info
         setStreamerInfo({
           id: userId,
@@ -197,7 +191,7 @@ const DonationPage = () => {
           setDonationStats({
             total,
             supporters: uniqueDonors,
-            goal: settings?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
+            goal: settings?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
             average
           });
           
@@ -216,14 +210,10 @@ const DonationPage = () => {
         }
 
         setIsLoading(false);
+        setError(null);
       } catch (err) {
         console.error("Exception fetching streamer info:", err);
         setError("Failed to load streamer information");
-        toast({
-          variant: "destructive",
-          title: "Error", 
-          description: "Failed to load streamer information",
-        });
         setIsLoading(false);
       }
     };
