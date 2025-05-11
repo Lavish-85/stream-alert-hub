@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
@@ -11,8 +12,7 @@ interface ExtendedWebSocket extends WebSocket {
 
 /**
  * Sends a test alert to the OBS browser source
- * This creates a temporary donation record in the database
- * that the LiveAlertsPage will pick up and display
+ * This creates a temporary donation record that will be deleted after sending
  */
 export const sendTestAlert = async () => {
   try {
@@ -72,6 +72,23 @@ export const sendTestAlert = async () => {
         console.error("WebSocket error when sending test:", err);
         toast.error("Failed to connect to WebSocket server");
       };
+
+      // Delete the test donation after a short delay to ensure it's been processed
+      setTimeout(async () => {
+        if (data && data.id) {
+          const { error: deleteError } = await supabase
+            .from('donations')
+            .delete()
+            .eq('id', data.id);
+          
+          if (deleteError) {
+            console.error("Error deleting test donation:", deleteError);
+          } else {
+            console.log("Test donation deleted successfully");
+          }
+        }
+      }, 5000); // Wait 5 seconds before deleting to ensure the alert has been displayed
+      
     } catch (wsErr) {
       console.error("Failed to send via WebSocket:", wsErr);
       toast.error("Failed to initialize WebSocket connection");
