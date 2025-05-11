@@ -68,41 +68,45 @@ const DonationCustomizePage = () => {
       
       setIsLoading(true);
       try {
+        // First check if settings already exist for this user
         const { data, error } = await supabase
           .from('donation_page_settings')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // No settings found, create default settings
-            const { error: insertError } = await supabase
-              .from('donation_page_settings')
-              .insert({ user_id: user.id });
-            
-            if (insertError) throw insertError;
-            
-            // Fetch the newly created settings
-            const { data: newSettings, error: fetchError } = await supabase
-              .from('donation_page_settings')
-              .select('*')
-              .eq('user_id', user.id)
-              .maybeSingle();
-            
-            if (fetchError) throw fetchError;
-            
-            if (newSettings) {
-              setSettings(newSettings);
-              form.reset(newSettings);
-            }
-          } else {
-            throw error;
-          }
-        } else if (data) {
+        if (error && error.code !== 'PGRST116') {
+          throw error;
+        }
+        
+        if (data) {
+          // Settings exist, load them
           console.log("Loaded settings from Supabase:", data);
           setSettings(data);
           form.reset(data);
+        } else {
+          // No settings exist yet, create default settings
+          const defaultSettings = {
+            user_id: user.id,
+            title: 'Support My Stream',
+            description: 'Your donation will help me create better content!',
+            goal_amount: 10000,
+            show_donation_goal: true,
+            show_recent_donors: true,
+            primary_color: '#8445ff',
+            secondary_color: '#4b1493',
+            custom_thank_you_message: 'Thank you for your donation! Your support means the world to me.',
+            custom_url: '',
+          };
+          
+          const { error: insertError } = await supabase
+            .from('donation_page_settings')
+            .insert(defaultSettings);
+            
+          if (insertError) throw insertError;
+          
+          setSettings(defaultSettings);
+          form.reset(defaultSettings);
         }
       } catch (err) {
         console.error("Error fetching donation page settings:", err);
@@ -179,15 +183,43 @@ const DonationCustomizePage = () => {
     setIsSaving(true);
     try {
       console.log("Saving settings to Supabase:", values);
-      const { error } = await supabase
-        .from('donation_page_settings')
-        .update(values)
-        .eq('user_id', user.id);
       
-      if (error) throw error;
+      // Check if settings already exist for this user
+      const { data, error: checkError } = await supabase
+        .from('donation_page_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+      
+      let saveError;
+      if (data) {
+        // Update existing settings
+        const { error } = await supabase
+          .from('donation_page_settings')
+          .update(values)
+          .eq('id', data.id);
+          
+        saveError = error;
+      } else {
+        // Insert new settings
+        const { error } = await supabase
+          .from('donation_page_settings')
+          .insert({ ...values, user_id: user.id });
+          
+        saveError = error;
+      }
+      
+      if (saveError) throw saveError;
       
       toast.success("Donation page settings saved successfully!");
       setSettings(values);
+      
+      // Refresh settings to ensure we're showing the most up-to-date data
+      setRefreshKey(prev => prev + 1);
     } catch (err) {
       console.error("Error saving donation page settings:", err);
       toast.error("Failed to save settings");
