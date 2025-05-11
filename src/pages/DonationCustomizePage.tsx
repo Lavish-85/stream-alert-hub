@@ -87,7 +87,7 @@ const DonationCustomizePage = () => {
           form.reset({
             customUrl: data.custom_url || "",
             pageTitle: data.title || "", 
-            cardTitle: data.card_title || "Support",
+            cardTitle: data.title || "Support", // Using title as cardTitle since card_title doesn't exist
             bio: data.description || "", 
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
@@ -99,7 +99,7 @@ const DonationCustomizePage = () => {
           setExistingSettings({
             customUrl: data.custom_url || "",
             pageTitle: data.title || "",
-            cardTitle: data.card_title || "Support",
+            cardTitle: data.title || "Support", // Using title as cardTitle since card_title doesn't exist
             bio: data.description || "",
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
@@ -174,8 +174,7 @@ const DonationCustomizePage = () => {
           .from('donation_page_settings')
           .update({
             custom_url: values.customUrl,
-            title: values.pageTitle || 'Support My Stream',
-            card_title: values.cardTitle || 'Support',
+            title: values.cardTitle || 'Support', // Using cardTitle for both title (no separate card_title column)
             description: values.bio || null,
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
@@ -192,8 +191,7 @@ const DonationCustomizePage = () => {
           .insert({
             user_id: user.id,
             custom_url: values.customUrl,
-            title: values.pageTitle || 'Support My Stream',
-            card_title: values.cardTitle || 'Support',
+            title: values.cardTitle || 'Support', // Using cardTitle for both title (no separate card_title column)
             description: values.bio || null,
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
@@ -610,3 +608,4 @@ const DonationCustomizePage = () => {
 };
 
 export default DonationCustomizePage;
+
