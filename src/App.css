@@ -28,6 +28,11 @@
   animation: fadeIn 0.5s ease-in-out;
 }
 
+.animate-fade-in-delayed {
+  animation: fadeIn 0.5s ease-in-out 0.2s forwards;
+  opacity: 0;
+}
+
 .animate-slide-in-right {
   animation: slideInRight 0.5s ease-in-out;
 }
@@ -65,3 +70,19 @@
 .font-montserrat {
   font-family: 'Montserrat', sans-serif;
 }
+
+/* Smooth color transitions */
+.color-transition {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Donation button hover effect */
+.donation-button {
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.donation-button:hover {
+  transform: translateY(-2px);
+  filter: brightness(110%);
+}
+

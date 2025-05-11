@@ -65,6 +65,10 @@ export default {
           800: "#5815b3",
           900: "#4b1493",
           950: "#2e0969",
+        },
+        donation: {
+          primary: "#8445ff",
+          accent: "#4b1493",
         }
       },
       borderRadius: {

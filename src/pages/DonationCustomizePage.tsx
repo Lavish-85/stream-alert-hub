@@ -18,6 +18,7 @@ import { Loader2, Save, Palette } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { ColorPicker } from "@/components/ui/color-picker";
 
 // Form schema for donation page settings
 const donationPageSchema = z.object({
@@ -52,8 +53,8 @@ const DonationCustomizePage = () => {
       goalAmount: 10000,
       showGoal: true,
       showRecentDonors: true,
-      primaryColor: "#9b87f5",
-      accentColor: "#7E69AB"
+      primaryColor: "#8445ff", // Updated to match database default
+      accentColor: "#4b1493" // Updated to match database default
     }
   });
 
@@ -83,13 +84,13 @@ const DonationCustomizePage = () => {
           // Update form with existing settings - mapping database column names to form field names
           form.reset({
             customUrl: data.custom_url || "",
-            pageTitle: data.title || "", // Correctly mapping to 'title' from DB
-            bio: data.description || "", // Correctly mapping to 'description' from DB
+            pageTitle: data.title || "", 
+            bio: data.description || "", 
             goalAmount: data.goal_amount || 10000,
-            showGoal: data.show_donation_goal ?? true, // Correctly mapping to 'show_donation_goal' from DB
+            showGoal: data.show_donation_goal ?? true,
             showRecentDonors: data.show_recent_donors ?? true,
-            primaryColor: data.primary_color || "#9b87f5",
-            accentColor: data.secondary_color || "#7E69AB" // Correctly mapping to 'secondary_color' from DB
+            primaryColor: data.primary_color || "#8445ff",
+            accentColor: data.secondary_color || "#4b1493"
           });
           
           setExistingSettings({
@@ -99,8 +100,8 @@ const DonationCustomizePage = () => {
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
             showRecentDonors: data.show_recent_donors ?? true,
-            primaryColor: data.primary_color || "#9b87f5",
-            accentColor: data.secondary_color || "#7E69AB"
+            primaryColor: data.primary_color || "#8445ff",
+            accentColor: data.secondary_color || "#4b1493"
           });
         } else {
           console.log("No existing donation settings found");
@@ -174,8 +175,8 @@ const DonationCustomizePage = () => {
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
             show_recent_donors: values.showRecentDonors,
-            primary_color: values.primaryColor || "#9b87f5",
-            secondary_color: values.accentColor || "#7E69AB",
+            primary_color: values.primaryColor || "#8445ff",
+            secondary_color: values.accentColor || "#4b1493",
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);
@@ -191,8 +192,8 @@ const DonationCustomizePage = () => {
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
             show_recent_donors: values.showRecentDonors,
-            primary_color: values.primaryColor || "#9b87f5",
-            secondary_color: values.accentColor || "#7E69AB",
+            primary_color: values.primaryColor || "#8445ff",
+            secondary_color: values.accentColor || "#4b1493",
             updated_at: new Date().toISOString()
           });
       }
@@ -234,6 +235,10 @@ const DonationCustomizePage = () => {
     
     return `${baseUrl}/donate/...`;
   };
+
+  // Watch color values for preview
+  const primaryColor = form.watch("primaryColor");
+  const accentColor = form.watch("accentColor");
   
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -367,7 +372,7 @@ const DonationCustomizePage = () => {
                     </CardHeader>
                     
                     <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
                           name="primaryColor"
@@ -379,16 +384,20 @@ const DonationCustomizePage = () => {
                                   <Input
                                     type="color"
                                     className="w-12 h-12 p-1 cursor-pointer"
-                                    {...field}
+                                    value={field.value}
+                                    onChange={field.onChange}
                                   />
                                   <Input
                                     type="text"
-                                    placeholder="#9b87f5"
+                                    placeholder="#8445ff"
                                     value={field.value}
                                     onChange={field.onChange}
                                   />
                                 </div>
                               </FormControl>
+                              <FormDescription>
+                                Used for buttons and highlights
+                              </FormDescription>
                             </FormItem>
                           )}
                         />
@@ -404,19 +413,29 @@ const DonationCustomizePage = () => {
                                   <Input
                                     type="color"
                                     className="w-12 h-12 p-1 cursor-pointer"
-                                    {...field}
+                                    value={field.value}
+                                    onChange={field.onChange}
                                   />
                                   <Input
                                     type="text"
-                                    placeholder="#7E69AB"
+                                    placeholder="#4b1493"
                                     value={field.value}
                                     onChange={field.onChange}
                                   />
                                 </div>
                               </FormControl>
+                              <FormDescription>
+                                Used for borders and secondary elements
+                              </FormDescription>
                             </FormItem>
                           )}
                         />
+                      </div>
+                      
+                      <div className="mt-2 p-3 bg-muted rounded-md">
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-medium">Tip:</span> Choose colors that match your brand for consistency across platforms
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -529,15 +548,15 @@ const DonationCustomizePage = () => {
                     <div 
                       className="w-full h-2 rounded-full mt-1 mb-2" 
                       style={{
-                        backgroundColor: form.watch("primaryColor") + "40",
-                        backgroundImage: `linear-gradient(to right, ${form.watch("primaryColor")}, ${form.watch("primaryColor")})`
+                        backgroundColor: primaryColor + "40",
+                        backgroundImage: `linear-gradient(to right, ${primaryColor}, ${primaryColor})`
                       }}
                     />
                     <Button 
                       className="w-full" 
                       style={{
-                        backgroundColor: form.watch("primaryColor"),
-                        borderColor: form.watch("accentColor"),
+                        backgroundColor: primaryColor,
+                        borderColor: accentColor,
                       }}
                     >
                       Donate Now
