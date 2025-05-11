@@ -96,6 +96,7 @@ const DonationPage = () => {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         
         if (!uuidRegex.test(channelId)) {
+          console.log("Using custom URL:", channelId);
           // This is a custom URL, need to find the actual user ID
           const { data: urlData, error: urlError } = await supabase
             .from('donation_page_settings')
@@ -116,6 +117,7 @@ const DonationPage = () => {
           }
           
           userId = urlData.user_id;
+          console.log("Found user ID from custom URL:", userId);
           profileQuery = profileQuery.eq('id', userId);
         } else {
           profileQuery = profileQuery.eq('id', channelId);
@@ -157,6 +159,8 @@ const DonationPage = () => {
         if (settingsError) {
           console.error("Error fetching page settings:", settingsError);
         }
+        
+        console.log("Fetched settings:", settings);
 
         // Set streamer info
         setStreamerInfo({

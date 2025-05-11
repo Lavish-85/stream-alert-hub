@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DonationLinkCard from "@/components/donation/DonationLinkCard";
 import { cn } from "@/lib/utils";
+import { ColorPicker } from "@/components/ui/color-picker";
 
 // Form schema
 const customizationSchema = z.object({
@@ -70,7 +72,7 @@ const DonationCustomizePage = () => {
           .from('donation_page_settings')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) {
           if (error.code === 'PGRST116') {
@@ -86,7 +88,7 @@ const DonationCustomizePage = () => {
               .from('donation_page_settings')
               .select('*')
               .eq('user_id', user.id)
-              .single();
+              .maybeSingle();
             
             if (fetchError) throw fetchError;
             
@@ -98,6 +100,7 @@ const DonationCustomizePage = () => {
             throw error;
           }
         } else if (data) {
+          console.log("Loaded settings from Supabase:", data);
           setSettings(data);
           form.reset(data);
         }
@@ -110,7 +113,7 @@ const DonationCustomizePage = () => {
     };
 
     fetchSettings();
-  }, [user, refreshKey]);
+  }, [user, refreshKey, form.reset]);
 
   // Debounced URL check function
   const checkCustomUrl = async (url: string) => {
@@ -168,13 +171,14 @@ const DonationCustomizePage = () => {
       return;
     }
 
-    if (values.custom_url && !urlAvailable) {
+    if (values.custom_url && !urlAvailable && urlAvailable !== null) {
       toast.error("Custom URL is not available");
       return;
     }
     
     setIsSaving(true);
     try {
+      console.log("Saving settings to Supabase:", values);
       const { error } = await supabase
         .from('donation_page_settings')
         .update(values)
@@ -182,7 +186,7 @@ const DonationCustomizePage = () => {
       
       if (error) throw error;
       
-      toast.success("Donation page settings saved");
+      toast.success("Donation page settings saved successfully!");
       setSettings(values);
     } catch (err) {
       console.error("Error saving donation page settings:", err);
@@ -296,15 +300,12 @@ const DonationCustomizePage = () => {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Primary Color</FormLabel>
-                              <div className="flex gap-2">
-                                <div 
-                                  className="w-10 h-10 rounded-md border"
-                                  style={{ backgroundColor: field.value }}
+                              <FormControl>
+                                <ColorPicker 
+                                  color={field.value} 
+                                  onChange={field.onChange}
                                 />
-                                <FormControl>
-                                  <Input {...field} />
-                                </FormControl>
-                              </div>
+                              </FormControl>
                               <FormDescription>
                                 Main color for buttons and accents
                               </FormDescription>
@@ -319,15 +320,12 @@ const DonationCustomizePage = () => {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Secondary Color</FormLabel>
-                              <div className="flex gap-2">
-                                <div 
-                                  className="w-10 h-10 rounded-md border"
-                                  style={{ backgroundColor: field.value }}
+                              <FormControl>
+                                <ColorPicker 
+                                  color={field.value} 
+                                  onChange={field.onChange}
                                 />
-                                <FormControl>
-                                  <Input {...field} />
-                                </FormControl>
-                              </div>
+                              </FormControl>
                               <FormDescription>
                                 Used for gradients and hover states
                               </FormDescription>
@@ -446,7 +444,7 @@ const DonationCustomizePage = () => {
                     </TabsContent>
                   </Tabs>
                   
-                  <Button type="submit" disabled={isSaving}>
+                  <Button type="submit" disabled={isSaving} className="w-full">
                     {isSaving ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -484,7 +482,7 @@ const DonationCustomizePage = () => {
             </CardHeader>
             <CardContent className="flex justify-center">
               <Button asChild>
-                <a href={`/donate/${user?.id}`} target="_blank" rel="noopener noreferrer">
+                <a href={`/donate/${settings?.custom_url || user?.id}`} target="_blank" rel="noopener noreferrer">
                   <LinkIcon className="mr-2 h-4 w-4" />
                   Open Preview
                 </a>
