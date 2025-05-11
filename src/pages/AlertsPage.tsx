@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -7,185 +7,80 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  ArrowLeft,
-  Save,
-  Loader2,
-  AlignLeft,
-  Palette,
-  Speaker,
-  Type,
-  Brush,
-  Play,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { Slider } from "@/components/ui/slider";
-import { cn } from "@/lib/utils";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useAlertStyle } from "@/contexts/AlertStyleContext";
-import { ColorPicker } from "@/components/ui/color-picker";
 import { useAuth } from "@/contexts/AuthContext";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import AlertPreview from "@/components/alerts/AlertPreview";
-import { sendTestAlert } from "@/utils/obsUtils";
+import AlertSettingsForm from "@/components/alerts/AlertSettingsForm";
+import AlertPreviewCard from "@/components/alerts/AlertPreviewCard";
+import AlertTips from "@/components/alerts/AlertTips";
 
 const AlertsPage = () => {
-  const { toast } = useToast();
-  const navigate = useNavigate();
   const { activeStyle, isLoading, updateStyleSetting, createStyle } = useAlertStyle();
   const { user } = useAuth();
-
-  const [form, setForm] = useState({
-    name: "Default",
+  const [previewState, setPreviewState] = useState({
     text_color: "#ffffff",
     background_color: "#111827",
-    volume: 50,
-    duration: 5,
     animation_type: "fade" as "fade" | "slide" | "bounce" | "zoom",
-    sound: null,
     font_family: "inherit",
-    description: "Default alert style",
-    show_popup: true,
   });
 
+  // Update preview state whenever activeStyle changes
   useEffect(() => {
     if (activeStyle) {
-      setForm({
-        name: activeStyle.name || "Default",
-        text_color: activeStyle.text_color || "#ffffff",
-        background_color: activeStyle.background_color || "#111827",
-        volume: activeStyle.volume || 50,
-        duration: activeStyle.duration || 5,
+      setPreviewState({
+        text_color: activeStyle.text_color,
+        background_color: activeStyle.background_color,
         animation_type: activeStyle.animation_type || "fade",
-        sound: activeStyle.sound || null,
         font_family: activeStyle.font_family || "inherit",
-        description: activeStyle.description || "Default alert style",
-        show_popup: activeStyle.show_popup !== false,
       });
     }
   }, [activeStyle]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
-  };
-
-  const handleSliderChange = (
-    value: number[],
-    name: "volume" | "duration"
-  ) => {
-    setForm({ ...form, [name]: value[0] });
-  };
-
-  const handleColorChange = (name: "text_color" | "background_color") => (
-    color: string
-  ) => {
-    setForm({ ...form, [name]: color });
-  };
-
-  const handleSave = async () => {
+  const handleSaveSettings = async (formData: any) => {
     if (!user) {
-      toast({
-        title: "Not authenticated",
-        description: "You must be logged in to save alert settings.",
-        variant: "destructive",
-      });
       return;
     }
+
+    // Update preview state immediately for instant visual feedback
+    setPreviewState({
+      text_color: formData.text_color,
+      background_color: formData.background_color,
+      animation_type: formData.animation_type,
+      font_family: formData.font_family,
+    });
 
     if (!activeStyle) {
       // Create a new style
       if (createStyle) {
         try {
           await createStyle({
-            ...form,
+            ...formData,
             user_id: user.id,
           });
-          toast({
-            title: "Success",
-            description: "New alert style created!",
-          });
-          navigate(0); // Refresh the page
         } catch (error) {
           console.error("Error creating style:", error);
-          toast({
-            title: "Error",
-            description: "Failed to create alert style.",
-            variant: "destructive",
-          });
+          throw error;
         }
-      } else {
-        toast({
-          title: "Error",
-          description: "Could not create style. Please try again later.",
-          variant: "destructive",
-        });
       }
     } else {
       // Update existing style
       if (updateStyleSetting) {
         try {
+          // Remove any fields that don't exist in the database schema
+          const { show_popup, ...updateData } = formData;
+          
           await updateStyleSetting({
             ...activeStyle,
-            ...form,
-          });
-          toast({
-            title: "Success",
-            description: "Alert style updated!",
+            ...updateData,
           });
         } catch (error) {
           console.error("Error updating style:", error);
-          toast({
-            title: "Error",
-            description: "Failed to update alert style.",
-            variant: "destructive",
-          });
+          throw error;
         }
-      } else {
-        toast({
-          title: "Error",
-          description: "Could not update style. Please try again later.",
-          variant: "destructive",
-        });
       }
     }
   };
-  
-  const testAlert = async () => {
-    try {
-      const { error } = await sendTestAlert();
-      if (error) {
-        toast({
-          title: "Test failed",
-          description: "Failed to send test alert.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Test alert sent",
-          description: "Check your OBS browser source to see the alert.",
-        });
-      }
-    } catch (err) {
-      console.error("Error sending test alert:", err);
-      toast({
-        title: "Test failed",
-        description: "Failed to send test alert.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const animationOptions = [
-    { value: "fade", label: "Fade" },
-    { value: "slide", label: "Slide" },
-    { value: "bounce", label: "Bounce" },
-    { value: "zoom", label: "Zoom" },
-  ];
 
   return (
     <div className="container max-w-4xl mx-auto">
@@ -207,189 +102,24 @@ const AlertsPage = () => {
               Adjust the appearance and behavior of your alerts
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading settings...
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Style Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={form.name}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Stream V1"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <AlignLeft className="mr-2 h-4 w-4" />
-                    Alert Text Color
-                  </Label>
-                  <ColorPicker
-                    color={form.text_color}
-                    onChange={handleColorChange("text_color")}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <Palette className="mr-2 h-4 w-4" />
-                    Background Color
-                  </Label>
-                  <ColorPicker
-                    color={form.background_color}
-                    onChange={handleColorChange("background_color")}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <Speaker className="mr-2 h-4 w-4" />
-                    Alert Volume
-                  </Label>
-                  <Slider
-                    defaultValue={[form.volume]}
-                    max={100}
-                    step={1}
-                    onValueChange={(value) => handleSliderChange(value, "volume")}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Adjust the volume of the alert sound.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <Brush className="mr-2 h-4 w-4" />
-                    Alert Duration
-                  </Label>
-                  <Slider
-                    defaultValue={[form.duration]}
-                    max={15}
-                    step={1}
-                    onValueChange={(value) => handleSliderChange(value, "duration")}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    How long the alert should display on screen (in seconds).
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center">
-                    <Type className="mr-2 h-4 w-4" />
-                    Font Family
-                  </Label>
-                  <Input
-                    id="font_family"
-                    name="font_family"
-                    value={form.font_family}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Arial, sans-serif"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    The font family to use for the alert text.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Animation Type</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {animationOptions.map((option) => (
-                      <Button
-                        key={option.value}
-                        variant={form.animation_type === option.value ? "default" : "outline"}
-                        onClick={() => setForm({ ...form, animation_type: option.value as "fade" | "slide" | "bounce" | "zoom" })}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select the animation style for the alert.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="show-popup"
-                      checked={form.show_popup !== false} // Default to true if undefined
-                      onCheckedChange={(checked) => {
-                        // Update local form state
-                        setForm({
-                          ...form,
-                          show_popup: checked === true
-                        });
-                      }}
-                    />
-                    <Label htmlFor="show-popup" className="font-medium text-sm">
-                      Show alert popups
-                    </Label>
-                  </div>
-                  <p className="text-xs text-muted-foreground pl-6">
-                    Display donation alerts as popups in the bottom-right corner
-                  </p>
-                </div>
-                
-                <div className="pt-4">
-                  <Button onClick={handleSave} disabled={isLoading} className="w-full">
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Save Changes
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
+          <CardContent>
+            <AlertSettingsForm 
+              activeStyle={activeStyle}
+              isLoading={isLoading}
+              onSave={handleSaveSettings}
+            />
           </CardContent>
         </Card>
         
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Alert Preview</CardTitle>
-              <CardDescription>
-                See how your alerts will look in real-time
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <AlertPreview 
-                textColor={form.text_color}
-                backgroundColor={form.background_color}
-                animationType={form.animation_type}
-                fontFamily={form.font_family}
-              />
-              
-              <Button 
-                variant="secondary" 
-                className="w-full"
-                onClick={testAlert}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Send Test Alert
-              </Button>
-            </CardContent>
-          </Card>
+          <AlertPreviewCard 
+            textColor={previewState.text_color}
+            backgroundColor={previewState.background_color}
+            animationType={previewState.animation_type}
+            fontFamily={previewState.font_family}
+          />
           
-          <Alert>
-            <AlertTitle>Tip: Alert Customization</AlertTitle>
-            <AlertDescription>
-              Try different combinations of colors, animations, and font styles to find what best matches your stream's branding.
-            </AlertDescription>
-          </Alert>
+          <AlertTips />
         </div>
       </div>
     </div>
