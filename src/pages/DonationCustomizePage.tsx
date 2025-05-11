@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -72,9 +71,6 @@ const DonationCustomizePage = () => {
       try {
         console.log("Fetching donation page settings for user:", user.id);
         
-        // Check if we need to update the database schema first
-        await checkAndUpdateSchema();
-        
         // Check if we have settings in the donation_page_settings table
         const { data, error } = await supabase
           .from('donation_page_settings')
@@ -124,60 +120,6 @@ const DonationCustomizePage = () => {
         
       } catch (err) {
         console.error("Exception in fetching donation settings:", err);
-      }
-    };
-    
-    // Check if we need to add new columns to the donation_page_settings table
-    const checkAndUpdateSchema = async () => {
-      try {
-        // First check if the show_supporters and show_average columns exist
-        const { data, error } = await supabase
-          .rpc('check_column_exists', { 
-            table_name: 'donation_page_settings',
-            column_name: 'show_supporters'
-          });
-        
-        if (error) {
-          console.error("Error checking if column exists:", error);
-          return;
-        }
-        
-        // If column doesn't exist, add it
-        if (!data) {
-          console.log("Adding new columns to donation_page_settings table");
-          
-          // Add the show_supporters column
-          const { error: addSupportersError } = await supabase.rpc(
-            'add_column_if_not_exists',
-            { 
-              table_name: 'donation_page_settings',
-              column_name: 'show_supporters',
-              column_type: 'boolean',
-              default_value: 'true'
-            }
-          );
-          
-          if (addSupportersError) {
-            console.error("Error adding show_supporters column:", addSupportersError);
-          }
-          
-          // Add the show_average column
-          const { error: addAverageError } = await supabase.rpc(
-            'add_column_if_not_exists',
-            { 
-              table_name: 'donation_page_settings',
-              column_name: 'show_average',
-              column_type: 'boolean',
-              default_value: 'true'
-            }
-          );
-          
-          if (addAverageError) {
-            console.error("Error adding show_average column:", addAverageError);
-          }
-        }
-      } catch (err) {
-        console.error("Error checking/updating schema:", err);
       }
     };
     

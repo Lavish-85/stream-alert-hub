@@ -68,8 +68,10 @@ export type Database = {
           id: string
           primary_color: string
           secondary_color: string
+          show_average: boolean
           show_donation_goal: boolean
           show_recent_donors: boolean
+          show_supporters: boolean
           title: string
           updated_at: string | null
           user_id: string
@@ -84,8 +86,10 @@ export type Database = {
           id?: string
           primary_color?: string
           secondary_color?: string
+          show_average?: boolean
           show_donation_goal?: boolean
           show_recent_donors?: boolean
+          show_supporters?: boolean
           title?: string
           updated_at?: string | null
           user_id: string
@@ -100,8 +104,10 @@ export type Database = {
           id?: string
           primary_color?: string
           secondary_color?: string
+          show_average?: boolean
           show_donation_goal?: boolean
           show_recent_donors?: boolean
+          show_supporters?: boolean
           title?: string
           updated_at?: string | null
           user_id?: string
