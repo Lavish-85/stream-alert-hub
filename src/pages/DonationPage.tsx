@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -99,10 +100,12 @@ const DonationPage = () => {
         if (!uuidRegex.test(channelId)) {
           console.log("Looking up custom URL:", channelId);
           // This is a custom URL, need to find the actual user ID
+          
+          // Make custom URL case-insensitive by using ILIKE
           const { data: urlData, error: urlError } = await supabase
             .from('donation_page_settings')
             .select('user_id')
-            .eq('custom_url', channelId)
+            .ilike('custom_url', channelId)  // Using ILIKE for case-insensitive matching
             .maybeSingle();
           
           if (urlError) {
@@ -114,13 +117,26 @@ const DonationPage = () => {
           
           if (!urlData || !urlData.user_id) {
             console.error("No user found with custom URL:", channelId);
-            setError("Could not find this streamer - Invalid custom URL");
-            setIsLoading(false);
-            return;
+            // Try one more lookup with exact match
+            const { data: exactData, error: exactError } = await supabase
+              .from('donation_page_settings')
+              .select('user_id')
+              .eq('custom_url', channelId)
+              .maybeSingle();
+              
+            if (exactError || !exactData || !exactData.user_id) {
+              console.error("No user found with exact custom URL:", channelId);
+              setError("Could not find this streamer - Invalid custom URL");
+              setIsLoading(false);
+              return;
+            }
+            
+            userId = exactData.user_id;
+            console.log("Found user ID from exact custom URL match:", userId);
+          } else {
+            userId = urlData.user_id;
+            console.log("Found user ID from case-insensitive custom URL:", userId);
           }
-          
-          userId = urlData.user_id;
-          console.log("Found user ID from custom URL:", userId);
         }
 
         console.log("Looking up profile for user ID:", userId);
@@ -141,6 +157,18 @@ const DonationPage = () => {
 
         if (!profile) {
           console.error("No profile found for user ID:", userId);
+          
+          // Double check if the user exists in auth
+          const { count, error: countError } = await supabase
+            .from('profiles')
+            .select('id', { count: 'exact' });
+            
+          console.log("Total profiles in database:", count);
+          
+          if (countError) {
+            console.error("Error counting profiles:", countError);
+          }
+          
           setError("Streamer profile not found");
           setIsLoading(false);
           return;

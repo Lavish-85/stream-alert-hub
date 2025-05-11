@@ -35,6 +35,8 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId, customUrl }
       
       setIsLoading(true);
       try {
+        console.log("Fetching custom URL for user:", effectiveUserId);
+        
         const { data, error } = await supabase
           .from('donation_page_settings')
           .select('custom_url')
@@ -42,12 +44,16 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId, customUrl }
           .maybeSingle();
         
         if (error && error.code !== 'PGRST116') {
+          console.error("Error fetching custom URL:", error);
+          toast.error("Failed to fetch donation URL");
           throw error;
         }
         
+        console.log("Fetched donation page settings:", data);
+        
         // Only set the custom URL if it's not empty
-        if (data?.custom_url) {
-          setEffectiveCustomUrl(data.custom_url);
+        if (data?.custom_url && data.custom_url.trim() !== '') {
+          setEffectiveCustomUrl(data.custom_url.trim());
         } else {
           setEffectiveCustomUrl(null);
         }
