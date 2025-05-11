@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
-import { DollarSign, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
+import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -86,11 +87,30 @@ const DonationPage = () => {
       }
 
       try {
+        console.log("Fetching streamer info for channelId:", channelId);
+        
+        // First try to find by custom URL
+        let userId = channelId;
+        
+        // Check if this is a custom URL
+        const { data: customUrlData, error: customUrlError } = await supabase
+          .from('donation_settings')
+          .select('user_id')
+          .ilike('custom_url', channelId)
+          .maybeSingle();
+          
+        if (customUrlError) {
+          console.error("Error checking custom URL:", customUrlError);
+        } else if (customUrlData) {
+          console.log("Found user ID from custom URL:", customUrlData.user_id);
+          userId = customUrlData.user_id;
+        }
+        
         // Fetch streamer profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('display_name, avatar_url, streamer_name')
-          .eq('id', channelId)
+          .eq('id', userId)
           .maybeSingle();
 
         if (profileError) {
@@ -105,18 +125,44 @@ const DonationPage = () => {
         }
 
         if (profile) {
+          console.log("Found streamer profile:", profile);
+          
+          // Also fetch additional settings
+          const { data: donationSettings } = await supabase
+            .from('donation_settings')
+            .select('bio, page_title, goal_amount, show_goal, show_recent_donors')
+            .eq('user_id', userId)
+            .maybeSingle();
+            
           setStreamerInfo({
-            name: profile.streamer_name || profile.display_name,
+            name: donationSettings?.page_title || profile.streamer_name || profile.display_name,
             avatar_url: profile.avatar_url,
-            bio: "Thank you for supporting my content! Your donations help me create better streams for everyone."
+            bio: donationSettings?.bio || "Thank you for supporting my content! Your donations help me create better streams for everyone."
           });
+          
+          // Update goal if we have custom settings
+          if (donationSettings?.goal_amount) {
+            setDonationStats(prev => ({
+              ...prev,
+              goal: donationSettings.goal_amount
+            }));
+          }
+        } else {
+          console.error("No streamer profile found for ID:", userId);
+          setError("Streamer profile not found");
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Streamer profile not found",
+          });
+          return;
         }
 
         // Fetch donation stats
         const { data: donations, error: donationsError } = await supabase
           .from('donations')
           .select('amount, donor_name, created_at')
-          .eq('user_id', channelId)
+          .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
         if (!donationsError && donations) {
@@ -124,12 +170,13 @@ const DonationPage = () => {
           const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
           const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
           
-          setDonationStats({
+          setDonationStats(prev => ({
+            ...prev,
             total,
             supporters: uniqueDonors,
-            goal: Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
-            average
-          });
+            average,
+            goal: prev.goal, // Keep existing goal or custom goal
+          }));
           
           // Process recent donations for the RecentDonors component
           const recent = donations.slice(0, 5).map(donation => ({
@@ -348,7 +395,7 @@ const DonationPage = () => {
                   <div className="bg-white bg-opacity-60 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="text-sm font-semibold flex items-center">
-                        <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
+                        <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
                         Total Donated
                       </h4>
                       <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
@@ -454,7 +501,7 @@ const DonationPage = () => {
                         <FormLabel className="sr-only">Custom Amount</FormLabel>
                         <FormControl>
                           <div className="relative">
-                            <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                            <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                             <Input
                               type="number"
                               placeholder="Enter custom amount"
