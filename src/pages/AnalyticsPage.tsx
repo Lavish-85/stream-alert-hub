@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -139,20 +140,25 @@ const AnalyticsPage = () => {
           table: 'donations'
         },
         (payload) => {
-          // If it's not a test donation, invalidate the query to trigger a refetch
-          if (payload.new && 
-              payload.new.payment_id && 
-              !payload.new.payment_id.startsWith('test_')) {
-            
-            // Use React Query's invalidation instead of page reload
-            queryClient.invalidateQueries({ queryKey: ['donations'] });
-            
-            // Show a toast notification about the donation update
-            const action = payload.eventType === 'INSERT' ? 'received' : 'updated';
-            toast({
-              title: `Donation ${action}`,
-              description: "Analytics data has been refreshed",
-            });
+          // Fix TypeScript error by adding proper type checking
+          // Check if payload.new exists and is an object
+          if (payload.new && typeof payload.new === 'object') {
+            // Check if payment_id property exists and it's not a test donation
+            if (
+              'payment_id' in payload.new && 
+              typeof payload.new.payment_id === 'string' && 
+              !payload.new.payment_id.startsWith('test_')
+            ) {
+              // Use React Query's invalidation instead of page reload
+              queryClient.invalidateQueries({ queryKey: ['donations'] });
+              
+              // Show a toast notification about the donation update
+              const action = payload.eventType === 'INSERT' ? 'received' : 'updated';
+              toast({
+                title: `Donation ${action}`,
+                description: "Analytics data has been refreshed",
+              });
+            }
           }
         }
       )
