@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -312,15 +313,15 @@ const SetupPage = () => {
                       Preview Donation Page
                     </Button>
                     
-                    <Button 
-                      variant="outline"
-                      className="flex-1"
-                      as={Link}
-                      to="/donation-customize"
-                    >
-                      <Settings className="mr-2 h-4 w-4" />
-                      Customize Donation Page
-                    </Button>
+                    <Link to="/donation-customize">
+                      <Button 
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <Settings className="mr-2 h-4 w-4" />
+                        Customize Donation Page
+                      </Button>
+                    </Link>
                   </div>
                   
                   {/* Show example of the donation page as a card or image */}
