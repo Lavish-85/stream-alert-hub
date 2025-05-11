@@ -120,4 +120,3 @@ const Sidebar = ({ isMobileOpen, setIsMobileOpen }: SidebarProps) => {
 };
 
 export default Sidebar;
-
