@@ -89,6 +89,13 @@
 /* Custom progress bar styling */
 :root {
   --progress-background: theme('colors.brand.500');
+  --selection-color: theme('colors.brand.500');
+}
+
+/* Style the text selection */
+::selection {
+  background-color: var(--selection-color);
+  color: white;
 }
 
 .progress {
@@ -98,4 +105,34 @@
 /* Override Tailwind progress color with React inline styles */
 .progress[style] {
   background-color: var(--progress-background);
+}
+
+/* Custom styles for the donation page */
+.donation-goal-card {
+  border-left: 4px solid var(--progress-background);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.donation-amount-button.selected {
+  background-color: var(--progress-background);
+  border-color: var(--selection-color);
+  color: white;
+}
+
+/* Make focused input fields use the theme color */
+input:focus, textarea:focus {
+  border-color: var(--progress-background);
+  box-shadow: 0 0 0 2px rgba(var(--progress-background), 0.2);
+  outline: none;
+}
+
+/* Style the popup animations */
+@keyframes popup {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.success-popup {
+  animation: popup 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }

@@ -32,6 +32,8 @@ const donationPageSchema = z.object({
   goalAmount: z.coerce.number().min(0, { message: "Goal amount must be positive" }).optional(),
   showGoal: z.boolean().default(true),
   showRecentDonors: z.boolean().default(true),
+  showSupporters: z.boolean().default(true),
+  showAverage: z.boolean().default(true),
   primaryColor: z.string().optional(),
   accentColor: z.string().optional(),
 });
@@ -55,6 +57,8 @@ const DonationCustomizePage = () => {
       goalAmount: 10000,
       showGoal: true,
       showRecentDonors: true,
+      showSupporters: true,
+      showAverage: true,
       primaryColor: "#8445ff", // Updated to match database default
       accentColor: "#4b1493" // Updated to match database default
     }
@@ -67,6 +71,9 @@ const DonationCustomizePage = () => {
       
       try {
         console.log("Fetching donation page settings for user:", user.id);
+        
+        // Check if we need to update the database schema first
+        await checkAndUpdateSchema();
         
         // Check if we have settings in the donation_page_settings table
         const { data, error } = await supabase
@@ -92,6 +99,8 @@ const DonationCustomizePage = () => {
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
             showRecentDonors: data.show_recent_donors ?? true,
+            showSupporters: data.show_supporters ?? true,
+            showAverage: data.show_average ?? true,
             primaryColor: data.primary_color || "#8445ff",
             accentColor: data.secondary_color || "#4b1493"
           });
@@ -104,6 +113,8 @@ const DonationCustomizePage = () => {
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
             showRecentDonors: data.show_recent_donors ?? true,
+            showSupporters: data.show_supporters ?? true,
+            showAverage: data.show_average ?? true,
             primaryColor: data.primary_color || "#8445ff",
             accentColor: data.secondary_color || "#4b1493"
           });
@@ -113,6 +124,60 @@ const DonationCustomizePage = () => {
         
       } catch (err) {
         console.error("Exception in fetching donation settings:", err);
+      }
+    };
+    
+    // Check if we need to add new columns to the donation_page_settings table
+    const checkAndUpdateSchema = async () => {
+      try {
+        // First check if the show_supporters and show_average columns exist
+        const { data, error } = await supabase
+          .rpc('check_column_exists', { 
+            table_name: 'donation_page_settings',
+            column_name: 'show_supporters'
+          });
+        
+        if (error) {
+          console.error("Error checking if column exists:", error);
+          return;
+        }
+        
+        // If column doesn't exist, add it
+        if (!data) {
+          console.log("Adding new columns to donation_page_settings table");
+          
+          // Add the show_supporters column
+          const { error: addSupportersError } = await supabase.rpc(
+            'add_column_if_not_exists',
+            { 
+              table_name: 'donation_page_settings',
+              column_name: 'show_supporters',
+              column_type: 'boolean',
+              default_value: 'true'
+            }
+          );
+          
+          if (addSupportersError) {
+            console.error("Error adding show_supporters column:", addSupportersError);
+          }
+          
+          // Add the show_average column
+          const { error: addAverageError } = await supabase.rpc(
+            'add_column_if_not_exists',
+            { 
+              table_name: 'donation_page_settings',
+              column_name: 'show_average',
+              column_type: 'boolean',
+              default_value: 'true'
+            }
+          );
+          
+          if (addAverageError) {
+            console.error("Error adding show_average column:", addAverageError);
+          }
+        }
+      } catch (err) {
+        console.error("Error checking/updating schema:", err);
       }
     };
     
@@ -179,6 +244,8 @@ const DonationCustomizePage = () => {
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
             show_recent_donors: values.showRecentDonors,
+            show_supporters: values.showSupporters,
+            show_average: values.showAverage,
             primary_color: values.primaryColor || "#8445ff",
             secondary_color: values.accentColor || "#4b1493",
             updated_at: new Date().toISOString()
@@ -196,6 +263,8 @@ const DonationCustomizePage = () => {
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
             show_recent_donors: values.showRecentDonors,
+            show_supporters: values.showSupporters,
+            show_average: values.showAverage,
             primary_color: values.primaryColor || "#8445ff",
             secondary_color: values.accentColor || "#4b1493",
             updated_at: new Date().toISOString()
@@ -244,6 +313,8 @@ const DonationCustomizePage = () => {
   const primaryColor = form.watch("primaryColor");
   const accentColor = form.watch("accentColor");
   const cardTitle = form.watch("cardTitle");
+  const showSupporters = form.watch("showSupporters");
+  const showAverage = form.watch("showAverage");
   
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -352,6 +423,48 @@ const DonationCustomizePage = () => {
                               <FormLabel>Show recent donors</FormLabel>
                               <FormDescription>
                                 Display recent donations on your page
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="showSupporters"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                            <div>
+                              <FormLabel>Show supporters count</FormLabel>
+                              <FormDescription>
+                                Display the number of supporters on your page
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="showAverage"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                            <div>
+                              <FormLabel>Show average donation</FormLabel>
+                              <FormDescription>
+                                Display the average donation amount on your page
                               </FormDescription>
                             </div>
                             <FormControl>
@@ -533,7 +646,10 @@ const DonationCustomizePage = () => {
               </div>
               
               <div className="aspect-[9/16] relative bg-slate-100 rounded-md overflow-hidden border">
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="absolute inset-0 flex flex-col items-center justify-center color-transition"
+                  style={{ 
+                    background: `linear-gradient(to bottom, ${primaryColor}10, ${accentColor}05)`
+                  }}>
                   <div className="w-full max-w-xs px-4 py-6 bg-white rounded-md shadow-md border flex flex-col items-center space-y-2 color-transition">
                     <Avatar className="h-16 w-16">
                       {profile?.avatar_url && <AvatarImage src={profile?.avatar_url} />}
@@ -554,6 +670,26 @@ const DonationCustomizePage = () => {
                     <div className="w-full text-center font-medium mb-2 color-transition">
                       {cardTitle || "Support"}
                     </div>
+                    
+                    {/* Supporter/Average metrics preview */}
+                    {(showSupporters || showAverage) && (
+                      <div className="w-full flex justify-around mb-2">
+                        {showSupporters && (
+                          <div className="text-center flex-1">
+                            <div className="text-xs text-gray-500">Supporters</div>
+                            <div className="font-bold">12</div>
+                          </div>
+                        )}
+                        
+                        {showAverage && (
+                          <div className="text-center flex-1">
+                            <div className="text-xs text-gray-500">Average</div>
+                            <div className="font-bold">₹500</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     <Button 
                       className="w-full donation-button color-transition" 
                       style={{
@@ -608,4 +744,3 @@ const DonationCustomizePage = () => {
 };
 
 export default DonationCustomizePage;
-

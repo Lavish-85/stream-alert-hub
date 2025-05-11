@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -40,6 +41,7 @@ const DonationPage = () => {
     bio?: string;
   } | null>(null);
   const [donationComplete, setDonationComplete] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [donationStats, setDonationStats] = useState({
@@ -63,6 +65,14 @@ const DonationPage = () => {
     accent: '#4b1493'
   });
   
+  // Add state for display settings
+  const [displaySettings, setDisplaySettings] = useState({
+    showGoal: true,
+    showRecentDonors: true,
+    showSupporters: true,
+    showAverage: true
+  });
+  
   // Initialize form
   const form = useForm<DonationFormValues>({
     resolver: zodResolver(donationFormSchema),
@@ -77,6 +87,71 @@ const DonationPage = () => {
   useEffect(() => {
     form.setValue("amount", selectedAmount);
   }, [selectedAmount, form]);
+
+  // Set up real-time subscription for donations
+  useEffect(() => {
+    if (!channelId) return;
+
+    // Determine the actual user ID (handling custom URL case)
+    const determineUserIdAndSubscribe = async () => {
+      // Check if this is a custom URL - using the correct table name: donation_page_settings
+      let userId = channelId;
+      const { data: customUrlData, error: customUrlError } = await supabase
+        .from('donation_page_settings')
+        .select('user_id')
+        .ilike('custom_url', channelId)
+        .maybeSingle();
+        
+      if (!customUrlError && customUrlData) {
+        userId = customUrlData.user_id;
+      }
+
+      // Subscribe to real-time updates for this user's donations
+      const channel = supabase
+        .channel('public:donations')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'donations',
+          filter: `user_id=eq.${userId}`
+        }, (payload) => {
+          console.log('New donation received:', payload);
+          
+          // Format the new donation
+          const newDonation = {
+            id: `${payload.new.donor_name}-${payload.new.created_at}`,
+            name: payload.new.donor_name,
+            amount: Number(payload.new.amount),
+            date: new Date(payload.new.created_at || '').toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric'
+            }),
+          };
+          
+          // Update the donation stats
+          setDonationStats(prev => ({
+            ...prev,
+            total: prev.total + Number(payload.new.amount),
+            supporters: prev.supporters + 1,
+            average: Math.round((prev.total + Number(payload.new.amount)) / (prev.supporters + 1))
+          }));
+          
+          // Update recent donors list
+          setRecentDonors(prev => {
+            const updated = [newDonation, ...prev].slice(0, 5);
+            return updated;
+          });
+        })
+        .subscribe();
+        
+      // Return cleanup function
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+    
+    determineUserIdAndSubscribe();
+  }, [channelId]);
 
   // Load streamer information
   useEffect(() => {
@@ -158,7 +233,19 @@ const DonationPage = () => {
                 primary: donationSettings.primary_color,
                 accent: donationSettings.secondary_color
               });
+              
+              // Update CSS variables for progress bar and other themed elements
+              document.documentElement.style.setProperty('--progress-background', donationSettings.primary_color);
+              document.documentElement.style.setProperty('--selection-color', donationSettings.primary_color);
             }
+            
+            // Update display settings based on streamer preferences
+            setDisplaySettings({
+              showGoal: donationSettings.show_donation_goal,
+              showRecentDonors: donationSettings.show_recent_donors,
+              showSupporters: true, // Default to true, will be updated if we add these settings
+              showAverage: true // Default to true, will be updated if we add these settings
+            });
           }
         } else {
           console.error("No streamer profile found for ID:", userId);
@@ -284,12 +371,20 @@ const DonationPage = () => {
         return;
       }
 
-      // Show success and set donation as complete
+      // Show success popup instead of navigating away
       toast({
         title: "Thank you for your donation!",
         description: "Your donation has been received.",
       });
-      setDonationComplete(true);
+      setShowSuccessPopup(true);
+      
+      // Reset the form
+      form.reset({
+        name: "",
+        amount: 100,
+        message: "",
+      });
+      setSelectedAmount(100);
       
       setIsLoading(false);
     } catch (err) {
@@ -310,65 +405,18 @@ const DonationPage = () => {
     form.setValue("amount", amount);
   };
 
-  // Handle donation success page
-  if (donationComplete) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
-        <Card className="w-full max-w-md shadow-lg animate-fade-in">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-green-600">
-              <HandHeart className="mx-auto mb-2 h-12 w-12" />
-              Thank You!
-            </CardTitle>
-            <CardDescription>
-              Your donation has been received
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <div className="mb-6 flex flex-col items-center">
-              {streamerInfo?.avatar_url && (
-                <Avatar className="h-16 w-16 mb-2">
-                  <AvatarImage src={streamerInfo.avatar_url} alt={streamerInfo.name} />
-                  <AvatarFallback>{streamerInfo.name?.charAt(0)}</AvatarFallback>
-                </Avatar>
-              )}
-              <p className="mb-4 text-lg">
-                Thank you for supporting{" "}
-                <span className="font-bold">{streamerInfo?.name}</span>
-              </p>
-              <div className="w-full max-w-xs mx-auto">
-                <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-4">
-                  <p className="font-medium">Your donation will:</p>
-                  <ul className="text-sm mt-2 text-left list-disc list-inside">
-                    <li>Appear in their stream shortly</li>
-                    <li>Help them create better content</li>
-                    <li>Support their creative journey</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-            <p className="text-muted-foreground italic">
-              "Your generosity means the world to me!" - {streamerInfo?.name}
-            </p>
-          </CardContent>
-          <CardFooter className="flex justify-center gap-3">
-            <Button onClick={() => setDonationComplete(false)} variant="outline">
-              <Heart className="mr-1 h-4 w-4" />
-              Donate Again
-            </Button>
-            <Button onClick={() => navigate("/")} variant="default">
-              Return Home
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
+  // Handle closing success popup
+  const handleCloseSuccessPopup = () => {
+    setShowSuccessPopup(false);
+  };
 
   // Display error state if there's an error
   if (error && !isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 to-indigo-100 p-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 to-indigo-100 p-4" 
+        style={{ 
+          background: `linear-gradient(to bottom, ${themeColors.primary}10, ${themeColors.accent}05)`
+        }}>
         <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-red-600">
@@ -402,8 +450,65 @@ const DonationPage = () => {
 
   const progressPercentage = Math.min(100, Math.round((donationStats.total / donationStats.goal) * 100));
 
+  // Success popup component
+  const SuccessPopup = () => {
+    if (!showSuccessPopup) return null;
+    
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 animate-fade-in">
+        <Card className="w-full max-w-md shadow-xl animate-scale-in">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-green-600">
+              <HandHeart className="mx-auto mb-2 h-12 w-12" />
+              Thank You!
+            </CardTitle>
+            <CardDescription>
+              Your donation has been received
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <div className="mb-4 flex flex-col items-center">
+              {streamerInfo?.avatar_url && (
+                <Avatar className="h-16 w-16 mb-2">
+                  <AvatarImage src={streamerInfo.avatar_url} alt={streamerInfo.name} />
+                  <AvatarFallback>{streamerInfo.name?.charAt(0)}</AvatarFallback>
+                </Avatar>
+              )}
+              <p className="mb-4 text-lg">
+                Thank you for supporting{" "}
+                <span className="font-bold">{streamerInfo?.name}</span>
+              </p>
+              <div className="bg-green-100 text-green-800 p-4 rounded-lg">
+                <p className="font-medium">Your donation will:</p>
+                <ul className="text-sm mt-2 text-left list-disc list-inside">
+                  <li>Appear in their stream shortly</li>
+                  <li>Help them create better content</li>
+                  <li>Support their creative journey</li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-center gap-3">
+            <Button 
+              onClick={handleCloseSuccessPopup} 
+              variant="default"
+              style={{
+                backgroundColor: themeColors.primary,
+              }}
+            >
+              Continue
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
+    <div className="flex min-h-screen items-center justify-center p-4 color-transition" 
+      style={{ 
+        background: `linear-gradient(to bottom, ${themeColors.primary}10, ${themeColors.accent}05)`
+      }}>
       <div className="w-full max-w-4xl flex flex-col md:flex-row gap-4">
         {/* Streamer Info Column */}
         <div className="w-full md:w-1/3">
@@ -423,43 +528,61 @@ const DonationPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-sm font-semibold flex items-center">
-                        <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
-                        Total Donated
-                      </h4>
-                      <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
+                  {displaySettings.showGoal && (
+                    <div className="bg-white bg-opacity-60 rounded-lg p-4" style={{
+                      borderLeft: `4px solid ${themeColors.primary}`,
+                      boxShadow: `0 2px 10px ${themeColors.primary}20`
+                    }}>
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-sm font-semibold flex items-center">
+                          <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
+                          Total Donated
+                        </h4>
+                        <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
+                      </div>
+                      {/* Apply themed colors to progress bar */}
+                      <div className="relative pt-1">
+                        <div className="overflow-hidden h-2 mb-1 text-xs flex rounded bg-gray-200">
+                          <div 
+                            style={{
+                              width: `${progressPercentage}%`,
+                              backgroundColor: themeColors.primary,
+                            }} 
+                            className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500"
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="mt-1 flex justify-between items-center text-xs">
+                        <div className="text-muted-foreground">
+                          {progressPercentage}% Complete
+                        </div>
+                        <div className="text-right text-muted-foreground font-medium" style={{ color: themeColors.accent }}>
+                          Goal: ₹{donationStats.goal.toLocaleString()}
+                        </div>
+                      </div>
                     </div>
-                    {/* Apply themed colors to progress bar */}
-                    <Progress 
-                      value={progressPercentage} 
-                      className="h-2" 
-                      style={{
-                        backgroundColor: `${themeColors.primary}40`,
-                        '--progress-background': themeColors.primary
-                      } as React.CSSProperties} 
-                    />
-                    <div className="mt-1 text-xs text-right text-muted-foreground">
-                      Goal: ₹{donationStats.goal.toLocaleString()}
-                    </div>
-                  </div>
+                  )}
 
                   <div className="flex justify-between">
-                    <div className="text-center flex-1">
-                      <div className="flex items-center justify-center">
-                        <Users className="h-4 w-4 mr-1 text-blue-600" />
-                        <span className="text-lg font-bold">{donationStats.supporters}</span>
+                    {displaySettings.showSupporters && (
+                      <div className="text-center flex-1">
+                        <div className="flex items-center justify-center">
+                          <Users className="h-4 w-4 mr-1 text-blue-600" />
+                          <span className="text-lg font-bold">{donationStats.supporters}</span>
+                        </div>
+                        <span className="text-xs">Supporters</span>
                       </div>
-                      <span className="text-xs">Supporters</span>
-                    </div>
-                    <div className="text-center flex-1">
-                      <div className="flex items-center justify-center">
-                        <Star className="h-4 w-4 mr-1 text-amber-500" />
-                        <span className="text-lg font-bold">₹{donationStats.average}</span>
+                    )}
+                    
+                    {displaySettings.showAverage && (
+                      <div className="text-center flex-1">
+                        <div className="flex items-center justify-center">
+                          <Star className="h-4 w-4 mr-1 text-amber-500" />
+                          <span className="text-lg font-bold">₹{donationStats.average}</span>
+                        </div>
+                        <span className="text-xs">Average</span>
                       </div>
-                      <span className="text-xs">Average</span>
-                    </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -472,8 +595,8 @@ const DonationPage = () => {
               </CardFooter>
             </Card>
             
-            {/* Recent Donors section */}
-            {channelId && (
+            {/* Recent Donors section - only show if enabled */}
+            {displaySettings.showRecentDonors && channelId && (
               <RecentDonors 
                 channelId={channelId} 
                 initialDonors={recentDonors} 
@@ -643,6 +766,9 @@ const DonationPage = () => {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Success Popup */}
+      <SuccessPopup />
     </div>
   );
 };
