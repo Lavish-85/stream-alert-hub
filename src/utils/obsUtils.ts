@@ -29,7 +29,8 @@ export const sendTestAlert = async () => {
       amount: 100,
       donor_name: "Test Donation",
       message: "This is a test donation alert.",
-      user_id: user.id
+      user_id: user.id,
+      is_test: true // Mark this as a test donation
     };
 
     // Insert the test donation into the database
@@ -73,7 +74,8 @@ export const sendTestAlert = async () => {
         toast.error("Failed to connect to WebSocket server");
       };
 
-      // Delete the test donation after a short delay to ensure it's been processed
+      // Delete the test donation after a longer delay to ensure it doesn't 
+      // persist in the database while still allowing enough time for processing
       setTimeout(async () => {
         if (data && data.id) {
           const { error: deleteError } = await supabase
@@ -87,7 +89,7 @@ export const sendTestAlert = async () => {
             console.log("Test donation deleted successfully");
           }
         }
-      }, 5000); // Wait 5 seconds before deleting to ensure the alert has been displayed
+      }, 120000); // Wait 2 minutes before deleting
       
     } catch (wsErr) {
       console.error("Failed to send via WebSocket:", wsErr);

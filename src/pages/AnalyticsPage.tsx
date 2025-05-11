@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -11,18 +10,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { DownloadCloud } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Donation, DonationAnalytics, RecentDonation } from "@/types/donation";
 import DonationMetricsCards from "@/components/analytics/DonationMetricsCards";
 import DonationChart from "@/components/analytics/DonationChart";
 import RecentDonationsTable from "@/components/analytics/RecentDonationsTable";
 
-// Function to fetch donations from Supabase
+// Function to fetch donations from Supabase - now filters out test donations
 const fetchDonations = async () => {
   const { data, error } = await supabase
     .from('donations')
     .select('*')
+    .not('payment_id', 'like', 'test_%')  // Filter out test donations by prefix
     .order('created_at', { ascending: false });
   
   if (error) {
@@ -119,6 +119,8 @@ const AnalyticsPage = () => {
   const [dateRange, setDateRange] = useState("7d");
   const [minAmount, setMinAmount] = useState(0);
   
+  const queryClient = useQueryClient();
+  
   // Fetch donations using React Query
   const { data: donations, isLoading, error } = useQuery({
     queryKey: ['donations'],
@@ -136,10 +138,22 @@ const AnalyticsPage = () => {
           schema: 'public',
           table: 'donations'
         },
-        () => {
-          // Invalidate and refetch donations when database changes
-          // This will trigger a refetch of the data
-          window.location.reload();
+        (payload) => {
+          // If it's not a test donation, invalidate the query to trigger a refetch
+          if (payload.new && 
+              payload.new.payment_id && 
+              !payload.new.payment_id.startsWith('test_')) {
+            
+            // Use React Query's invalidation instead of page reload
+            queryClient.invalidateQueries({ queryKey: ['donations'] });
+            
+            // Show a toast notification about the donation update
+            const action = payload.eventType === 'INSERT' ? 'received' : 'updated';
+            toast({
+              title: `Donation ${action}`,
+              description: "Analytics data has been refreshed",
+            });
+          }
         }
       )
       .subscribe();
@@ -147,7 +161,7 @@ const AnalyticsPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [queryClient]);
 
   const formatIndianRupees = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {

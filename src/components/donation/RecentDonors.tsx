@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,6 +53,7 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
           .from('donations')
           .select('amount, donor_name, created_at')
           .eq('user_id', userId)
+          .not('payment_id', 'like', 'test_%')  // Filter out test donations
           .order('created_at', { ascending: false })
           .limit(5);
 
@@ -121,6 +123,12 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
           (payload) => {
             console.log("New donation received in RecentDonors:", payload);
             const newDonation = payload.new;
+            
+            // Skip test donations in real-time updates
+            if (newDonation.payment_id && newDonation.payment_id.startsWith('test_')) {
+              console.log("Ignoring test donation:", newDonation.payment_id);
+              return;
+            }
             
             // Create a donor object from the new donation
             const newDonor: Donor = {
