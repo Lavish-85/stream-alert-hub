@@ -27,6 +27,7 @@ const donationPageSchema = z.object({
     .max(30, { message: "Custom URL must be at most 30 characters" })
     .regex(/^[a-zA-Z0-9_-]+$/, { message: "Custom URL can only contain letters, numbers, underscores and hyphens" }),
   pageTitle: z.string().max(50, { message: "Title must be at most 50 characters" }).optional(),
+  cardTitle: z.string().max(50, { message: "Card title must be at most 50 characters" }).optional(),
   bio: z.string().max(300, { message: "Bio must be at most 300 characters" }).optional(),
   goalAmount: z.coerce.number().min(0, { message: "Goal amount must be positive" }).optional(),
   showGoal: z.boolean().default(true),
@@ -49,6 +50,7 @@ const DonationCustomizePage = () => {
     defaultValues: {
       customUrl: "",
       pageTitle: "",
+      cardTitle: "Support",
       bio: "",
       goalAmount: 10000,
       showGoal: true,
@@ -85,6 +87,7 @@ const DonationCustomizePage = () => {
           form.reset({
             customUrl: data.custom_url || "",
             pageTitle: data.title || "", 
+            cardTitle: data.card_title || "Support",
             bio: data.description || "", 
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
@@ -96,6 +99,7 @@ const DonationCustomizePage = () => {
           setExistingSettings({
             customUrl: data.custom_url || "",
             pageTitle: data.title || "",
+            cardTitle: data.card_title || "Support",
             bio: data.description || "",
             goalAmount: data.goal_amount || 10000,
             showGoal: data.show_donation_goal ?? true,
@@ -171,6 +175,7 @@ const DonationCustomizePage = () => {
           .update({
             custom_url: values.customUrl,
             title: values.pageTitle || 'Support My Stream',
+            card_title: values.cardTitle || 'Support',
             description: values.bio || null,
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
@@ -188,6 +193,7 @@ const DonationCustomizePage = () => {
             user_id: user.id,
             custom_url: values.customUrl,
             title: values.pageTitle || 'Support My Stream',
+            card_title: values.cardTitle || 'Support',
             description: values.bio || null,
             goal_amount: values.goalAmount || 10000,
             show_donation_goal: values.showGoal,
@@ -239,6 +245,7 @@ const DonationCustomizePage = () => {
   // Watch color values for preview
   const primaryColor = form.watch("primaryColor");
   const accentColor = form.watch("accentColor");
+  const cardTitle = form.watch("cardTitle");
   
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -380,20 +387,7 @@ const DonationCustomizePage = () => {
                             <FormItem>
                               <FormLabel>Primary Color</FormLabel>
                               <FormControl>
-                                <div className="flex space-x-2">
-                                  <Input
-                                    type="color"
-                                    className="w-12 h-12 p-1 cursor-pointer"
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                  />
-                                  <Input
-                                    type="text"
-                                    placeholder="#8445ff"
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                  />
-                                </div>
+                                <ColorPicker color={field.value || "#8445ff"} onChange={field.onChange} className="w-full" />
                               </FormControl>
                               <FormDescription>
                                 Used for buttons and highlights
@@ -409,20 +403,7 @@ const DonationCustomizePage = () => {
                             <FormItem>
                               <FormLabel>Accent Color</FormLabel>
                               <FormControl>
-                                <div className="flex space-x-2">
-                                  <Input
-                                    type="color"
-                                    className="w-12 h-12 p-1 cursor-pointer"
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                  />
-                                  <Input
-                                    type="text"
-                                    placeholder="#4b1493"
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                  />
-                                </div>
+                                <ColorPicker color={field.value || "#4b1493"} onChange={field.onChange} className="w-full" />
                               </FormControl>
                               <FormDescription>
                                 Used for borders and secondary elements
@@ -466,6 +447,26 @@ const DonationCustomizePage = () => {
                             </FormControl>
                             <FormDescription>
                               Custom title for your donation page (optional)
+                            </FormDescription>
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="cardTitle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Card Title</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Support"
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Title shown on the donation card
                             </FormDescription>
                           </FormItem>
                         )}
@@ -535,7 +536,7 @@ const DonationCustomizePage = () => {
               
               <div className="aspect-[9/16] relative bg-slate-100 rounded-md overflow-hidden border">
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="w-full max-w-xs px-4 py-6 bg-white rounded-md shadow-md border flex flex-col items-center space-y-2">
+                  <div className="w-full max-w-xs px-4 py-6 bg-white rounded-md shadow-md border flex flex-col items-center space-y-2 color-transition">
                     <Avatar className="h-16 w-16">
                       {profile?.avatar_url && <AvatarImage src={profile?.avatar_url} />}
                       <AvatarFallback>{profile?.display_name?.slice(0,2) || 'SD'}</AvatarFallback>
@@ -546,14 +547,17 @@ const DonationCustomizePage = () => {
                       {(form.watch("bio")?.length || 0) > 50 ? "..." : ""}
                     </p>
                     <div 
-                      className="w-full h-2 rounded-full mt-1 mb-2" 
+                      className="w-full h-2 rounded-full mt-1 mb-2 color-transition" 
                       style={{
-                        backgroundColor: primaryColor + "40",
-                        backgroundImage: `linear-gradient(to right, ${primaryColor}, ${primaryColor})`
+                        backgroundColor: `${primaryColor}40`,
+                        background: `linear-gradient(to right, ${primaryColor} 50%, ${primaryColor}40 50%)`
                       }}
                     />
+                    <div className="w-full text-center font-medium mb-2 color-transition">
+                      {cardTitle || "Support"}
+                    </div>
                     <Button 
-                      className="w-full" 
+                      className="w-full donation-button color-transition" 
                       style={{
                         backgroundColor: primaryColor,
                         borderColor: accentColor,
