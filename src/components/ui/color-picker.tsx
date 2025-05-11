@@ -14,8 +14,7 @@ const predefinedColors = [
   "#000000", "#FFFFFF", "#FF0000", "#00FF00", "#0000FF", 
   "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080",
   "#008000", "#800000", "#008080", "#000080", "#FFC0CB",
-  "#4F46E5", "#10B981", "#EF4444", "#F59E0B", "#111827",
-  "#8445ff", "#4b1493", "#9b87f5", "#D6BCFA", "#7E69AB"
+  "#4F46E5", "#10B981", "#EF4444", "#F59E0B", "#111827"
 ];
 
 export function ColorPicker({ color, onChange, className }: ColorPickerProps) {

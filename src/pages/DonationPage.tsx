@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -12,12 +11,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
-import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users, Loader2 } from "lucide-react";
+import { DollarSign, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
-import { cn } from "@/lib/utils";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
@@ -34,15 +33,14 @@ type DonationFormValues = z.infer<typeof donationFormSchema>;
 const DonationPage = () => {
   const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [streamerInfo, setStreamerInfo] = useState<{ 
-    id?: string;
     name?: string; 
     avatar_url?: string;
     bio?: string;
   } | null>(null);
-  const [pageSettings, setPageSettings] = useState<any>(null);
   const [donationComplete, setDonationComplete] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [donationStats, setDonationStats] = useState({
     total: 0,
@@ -84,142 +82,52 @@ const DonationPage = () => {
           title: "Error",
           description: "Invalid donation link",
         });
-        setIsLoading(false);
         return;
       }
 
       try {
-        console.log("Fetching streamer info for channel ID:", channelId);
-        
-        // First check if this is a custom URL
-        let userId = channelId;
-        
-        // Check if channelId is a UUID (default) or custom URL
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        
-        if (!uuidRegex.test(channelId)) {
-          console.log("Looking up custom URL:", channelId);
-          // This is a custom URL, need to find the actual user ID
-          
-          // Make custom URL case-insensitive by using ILIKE
-          const { data: urlData, error: urlError } = await supabase
-            .from('donation_page_settings')
-            .select('user_id')
-            .ilike('custom_url', channelId)  // Using ILIKE for case-insensitive matching
-            .maybeSingle();
-          
-          if (urlError) {
-            console.error("Error finding user with custom URL:", urlError);
-            setError("Could not find this streamer - URL lookup error");
-            setIsLoading(false);
-            return;
-          }
-          
-          if (!urlData || !urlData.user_id) {
-            console.error("No user found with custom URL:", channelId);
-            // Try one more lookup with exact match
-            const { data: exactData, error: exactError } = await supabase
-              .from('donation_page_settings')
-              .select('user_id')
-              .eq('custom_url', channelId)
-              .maybeSingle();
-              
-            if (exactError || !exactData || !exactData.user_id) {
-              console.error("No user found with exact custom URL:", channelId);
-              setError("Could not find this streamer - Invalid custom URL");
-              setIsLoading(false);
-              return;
-            }
-            
-            userId = exactData.user_id;
-            console.log("Found user ID from exact custom URL match:", userId);
-          } else {
-            userId = urlData.user_id;
-            console.log("Found user ID from case-insensitive custom URL:", userId);
-          }
-        }
-
-        console.log("Looking up profile for user ID:", userId);
-        
-        // Fetch streamer profile with the determined user ID
+        // Fetch streamer profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
-          .eq('id', userId)
+          .select('display_name, avatar_url, streamer_name')
+          .eq('id', channelId)
           .maybeSingle();
 
         if (profileError) {
-          console.error("Error fetching streamer profile:", profileError);
-          setError("Could not find this streamer - Profile lookup error");
-          setIsLoading(false);
+          console.error("Error fetching streamer info:", profileError);
+          setError("Could not find this streamer");
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not find this streamer",
+          });
           return;
         }
 
-        if (!profile) {
-          console.error("No profile found for user ID:", userId);
-          
-          // Double check if the user exists in auth
-          const { count, error: countError } = await supabase
-            .from('profiles')
-            .select('id', { count: 'exact' });
-            
-          console.log("Total profiles in database:", count);
-          
-          if (countError) {
-            console.error("Error counting profiles:", countError);
-          }
-          
-          setError("Streamer profile not found");
-          setIsLoading(false);
-          return;
-        }
-
-        console.log("Found profile:", profile);
-
-        // Fetch donation page settings
-        const { data: settings, error: settingsError } = await supabase
-          .from('donation_page_settings')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (settingsError && settingsError.code !== 'PGRST116') {
-          console.error("Error fetching page settings:", settingsError);
-        }
-        
-        // Set streamer info
-        setStreamerInfo({
-          id: userId,
-          name: profile.streamer_name || profile.display_name || profile.username,
-          avatar_url: profile.avatar_url,
-          bio: settings?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
-        });
-
-        // Set page settings
-        if (settings) {
-          setPageSettings(settings);
-          setDonationStats(prev => ({
-            ...prev,
-            goal: settings.goal_amount || 10000
-          }));
+        if (profile) {
+          setStreamerInfo({
+            name: profile.streamer_name || profile.display_name,
+            avatar_url: profile.avatar_url,
+            bio: "Thank you for supporting my content! Your donations help me create better streams for everyone."
+          });
         }
 
         // Fetch donation stats
         const { data: donations, error: donationsError } = await supabase
           .from('donations')
           .select('amount, donor_name, created_at')
-          .eq('user_id', userId)
+          .eq('user_id', channelId)
           .order('created_at', { ascending: false });
 
         if (!donationsError && donations) {
-          const total = donations.reduce((sum, donation) => sum + Number(donation.amount), 0);
+          const total = donations.reduce((sum, donation) => sum + donation.amount, 0);
           const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
           const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
           
           setDonationStats({
             total,
             supporters: uniqueDonors,
-            goal: settings?.goal_amount || Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000),
+            goal: Math.max(10000, Math.ceil(total * 1.5 / 10000) * 10000), // Set goal higher than current total
             average
           });
           
@@ -227,7 +135,7 @@ const DonationPage = () => {
           const recent = donations.slice(0, 5).map(donation => ({
             id: `${donation.donor_name}-${donation.created_at}`,
             name: donation.donor_name,
-            amount: Number(donation.amount),
+            amount: donation.amount,
             date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
               month: 'short', 
               day: 'numeric'
@@ -237,20 +145,26 @@ const DonationPage = () => {
           setRecentDonors(recent);
         }
 
-        setIsLoading(false);
-        setError(null);
       } catch (err) {
         console.error("Exception fetching streamer info:", err);
         setError("Failed to load streamer information");
-        setIsLoading(false);
+        toast({
+          variant: "destructive",
+          title: "Error", 
+          description: "Failed to load streamer information",
+        });
       }
     };
     
-    fetchStreamerInfo();
+    if (channelId) {
+      fetchStreamerInfo();
+    } else {
+      setError("Invalid donation link - missing channel ID");
+    }
   }, [channelId]);
 
   const onSubmit = async (values: DonationFormValues) => {
-    if (!streamerInfo?.id) {
+    if (!channelId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -276,7 +190,7 @@ const DonationPage = () => {
           amount: values.amount,
           donor_name: values.name,
           message: values.message || "",
-          user_id: streamerInfo.id,
+          user_id: channelId,
           payment_id: paymentId
         });
         
@@ -318,29 +232,8 @@ const DonationPage = () => {
     form.setValue("amount", amount);
   };
 
-  // Loading state
-  if (isLoading && !donationComplete) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">
-              <Loader2 className="mx-auto mb-2 h-12 w-12 animate-spin text-brand-600" />
-              Loading Donation Page
-            </CardTitle>
-            <CardDescription>
-              Please wait while we prepare your donation experience
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
   // Handle donation success page
   if (donationComplete) {
-    const thankYouMessage = pageSettings?.custom_thank_you_message || "Thank you for your donation! Your support means the world to me.";
-    
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
         <Card className="w-full max-w-md shadow-lg animate-fade-in">
@@ -367,10 +260,18 @@ const DonationPage = () => {
               </p>
               <div className="w-full max-w-xs mx-auto">
                 <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-4">
-                  <p className="font-medium">{thankYouMessage}</p>
+                  <p className="font-medium">Your donation will:</p>
+                  <ul className="text-sm mt-2 text-left list-disc list-inside">
+                    <li>Appear in their stream shortly</li>
+                    <li>Help them create better content</li>
+                    <li>Support their creative journey</li>
+                  </ul>
                 </div>
               </div>
             </div>
+            <p className="text-muted-foreground italic">
+              "Your generosity means the world to me!" - {streamerInfo?.name}
+            </p>
           </CardContent>
           <CardFooter className="flex justify-center gap-3">
             <Button onClick={() => setDonationComplete(false)} variant="outline">
@@ -422,14 +323,6 @@ const DonationPage = () => {
   }
 
   const progressPercentage = Math.min(100, Math.round((donationStats.total / donationStats.goal) * 100));
-  
-  // Apply custom styles from page settings if available
-  const primaryColor = pageSettings?.primary_color || '#8445ff';
-  const secondaryColor = pageSettings?.secondary_color || '#4b1493';
-  const showDonationGoal = pageSettings?.show_donation_goal !== false; // Default to true if not specified
-  const showRecentDonors = pageSettings?.show_recent_donors !== false; // Default to true if not specified
-  const pageTitle = pageSettings?.title || `Support ${streamerInfo?.name || "this Streamer"}`;
-  const pageDescription = pageSettings?.description || "Your donation will help me create better content!";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-purple-50 to-indigo-100 p-4">
@@ -452,21 +345,19 @@ const DonationPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {showDonationGoal && (
-                    <div className="bg-white bg-opacity-60 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-semibold flex items-center">
-                          <IndianRupee className="h-4 w-4 mr-1 text-emerald-600" /> 
-                          Total Donated
-                        </h4>
-                        <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
-                      </div>
-                      <Progress value={progressPercentage} className="h-2" />
-                      <div className="mt-1 text-xs text-right text-muted-foreground">
-                        Goal: ₹{donationStats.goal.toLocaleString()}
-                      </div>
+                  <div className="bg-white bg-opacity-60 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-semibold flex items-center">
+                        <DollarSign className="h-4 w-4 mr-1 text-emerald-600" /> 
+                        Total Donated
+                      </h4>
+                      <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
                     </div>
-                  )}
+                    <Progress value={progressPercentage} className="h-2" />
+                    <div className="mt-1 text-xs text-right text-muted-foreground">
+                      Goal: ₹{donationStats.goal.toLocaleString()}
+                    </div>
+                  </div>
 
                   <div className="flex justify-between">
                     <div className="text-center flex-1">
@@ -496,9 +387,9 @@ const DonationPage = () => {
             </Card>
             
             {/* Recent Donors section */}
-            {showRecentDonors && streamerInfo?.id && (
+            {channelId && (
               <RecentDonors 
-                channelId={streamerInfo.id} 
+                channelId={channelId} 
                 initialDonors={recentDonors} 
                 className="animate-fade-in-delayed" 
               />
@@ -507,21 +398,13 @@ const DonationPage = () => {
         </div>
 
         {/* Donation Form Column */}
-        <Card 
-          className="w-full md:w-2/3 shadow-lg animate-fade-in" 
-          style={{
-            backgroundImage: `linear-gradient(to right, ${primaryColor}10, ${secondaryColor}10)`
-          }}
-        >
+        <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
           <CardHeader className="text-center">
-            <CardTitle 
-              className="text-2xl font-bold bg-clip-text text-transparent"
-              style={{ backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` }}
-            >
-              {pageTitle}
+            <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-800">
+              Support {streamerInfo?.name || "this Streamer"}
             </CardTitle>
             <CardDescription>
-              {pageDescription}
+              Your donation will appear on stream and help support great content
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -554,13 +437,9 @@ const DonationPage = () => {
                         variant={selectedAmount === amount ? "default" : "outline"} 
                         onClick={() => handleAmountSelect(amount)}
                         className={`
-                          ${selectedAmount === amount ? `ring-2 ring-offset-1`  : ''}
+                          ${selectedAmount === amount ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
                           hover:scale-105 transition-transform
                         `}
-                        style={selectedAmount === amount ? { 
-                          borderColor: primaryColor,
-                          backgroundColor: primaryColor 
-                        } : {}}
                       >
                         ₹{amount}
                       </Button>
@@ -575,7 +454,7 @@ const DonationPage = () => {
                         <FormLabel className="sr-only">Custom Amount</FormLabel>
                         <FormControl>
                           <div className="relative">
-                            <IndianRupee className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                            <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                             <Input
                               type="number"
                               placeholder="Enter custom amount"
@@ -620,10 +499,10 @@ const DonationPage = () => {
                     <TooltipTrigger asChild>
                       <Button
                         type="submit"
-                        className="w-full relative overflow-hidden transition-all group"
-                        style={{ backgroundImage: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` }}
+                        className="w-full relative overflow-hidden transition-all group bg-gradient-to-r from-brand-500 to-brand-700"
                         disabled={isLoading}
                       >
+                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-brand-600 to-brand-800 opacity-0 group-hover:opacity-100 transition-opacity"></span>
                         <span className="relative flex items-center justify-center">
                           <Gift className="mr-2 h-4 w-4" />
                           {isLoading ? "Processing..." : "Donate Now"}

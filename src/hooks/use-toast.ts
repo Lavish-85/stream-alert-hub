@@ -1,4 +1,3 @@
-
 import * as React from "react"
 
 import type {
@@ -170,7 +169,6 @@ function toast({ ...props }: Toast) {
 }
 
 function useToast() {
-  // Ensure React is defined and useState is being called correctly
   const [state, setState] = React.useState<State>(memoryState)
 
   React.useEffect(() => {

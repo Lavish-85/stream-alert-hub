@@ -17,7 +17,6 @@ import { AuthProvider } from "./contexts/AuthContext";
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DonationPage from "./pages/DonationPage";
-import DonationCustomizePage from "./pages/DonationCustomizePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,7 +67,6 @@ const App = () => {
                 <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
-                <Route path="/donation-customize" element={<ProtectedRoute><Layout><DonationCustomizePage /></Layout></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
