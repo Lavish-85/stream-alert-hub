@@ -24,13 +24,14 @@ export const sendTestAlert = async () => {
       return { error: "User not authenticated" };
     }
 
+    // Instead of using an is_test field, we'll rely on the payment_id prefix
+    // to identify test donations, since the schema doesn't have an is_test column
     const testDonation = {
       payment_id: `test_${uuidv4().substring(0, 8)}`,
       amount: 100,
       donor_name: "Test Donation",
       message: "This is a test donation alert.",
-      user_id: user.id,
-      is_test: true // Mark this as a test donation
+      user_id: user.id
     };
 
     // Insert the test donation into the database
