@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -90,7 +91,6 @@ const DonationPage = () => {
       try {
         // First check if this is a custom URL
         let userId = channelId;
-        let profileQuery = supabase.from('profiles').select('*');
         
         // Check if channelId is a UUID (default) or custom URL
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -104,8 +104,8 @@ const DonationPage = () => {
             .eq('custom_url', channelId)
             .maybeSingle();
           
-          if (urlError || !urlData) {
-            console.error("Error finding user with custom URL:", urlError);
+          if (urlError || !urlData?.user_id) {
+            console.error("Error finding user with custom URL:", urlError || "No user ID found");
             setError("Could not find this streamer");
             toast({
               variant: "destructive",
@@ -118,32 +118,34 @@ const DonationPage = () => {
           
           userId = urlData.user_id;
           console.log("Found user ID from custom URL:", userId);
-          profileQuery = profileQuery.eq('id', userId);
-        } else {
-          profileQuery = profileQuery.eq('id', channelId);
         }
 
-        // Fetch streamer profile
-        const { data: profile, error: profileError } = await profileQuery.maybeSingle();
+        // Fetch streamer profile with the determined user ID
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
         if (profileError) {
-          console.error("Error fetching streamer info:", profileError);
+          console.error("Error fetching streamer profile:", profileError);
           setError("Could not find this streamer");
           toast({
             variant: "destructive",
             title: "Error",
-            description: "Could not find this streamer",
+            description: "Could not find this streamer profile",
           });
           setIsLoading(false);
           return;
         }
 
         if (!profile) {
+          console.error("No profile found for user ID:", userId);
           setError("Streamer not found");
           toast({
             variant: "destructive",
             title: "Error",
-            description: "Streamer not found",
+            description: "Streamer profile not found",
           });
           setIsLoading(false);
           return;
@@ -156,16 +158,17 @@ const DonationPage = () => {
           .eq('user_id', userId)
           .maybeSingle();
 
-        if (settingsError) {
+        if (settingsError && settingsError.code !== 'PGRST116') {
           console.error("Error fetching page settings:", settingsError);
         }
         
         console.log("Fetched settings:", settings);
+        console.log("Fetched profile:", profile);
 
         // Set streamer info
         setStreamerInfo({
           id: userId,
-          name: profile.streamer_name || profile.display_name,
+          name: profile.streamer_name || profile.display_name || profile.username,
           avatar_url: profile.avatar_url,
           bio: settings?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
         });

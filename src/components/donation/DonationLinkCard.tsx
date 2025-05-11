@@ -41,8 +41,16 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId, customUrl }
           .eq('user_id', effectiveUserId)
           .maybeSingle();
         
-        if (error) throw error;
-        setEffectiveCustomUrl(data?.custom_url || null);
+        if (error && error.code !== 'PGRST116') {
+          throw error;
+        }
+        
+        // Only set the custom URL if it's not empty
+        if (data?.custom_url) {
+          setEffectiveCustomUrl(data.custom_url);
+        } else {
+          setEffectiveCustomUrl(null);
+        }
       } catch (err) {
         console.error("Failed to fetch custom URL:", err);
       } finally {
