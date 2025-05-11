@@ -3,7 +3,7 @@ import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
-import { AlertPreview } from "@/components/alerts/AlertPreview";
+import AlertPreview from "@/components/alerts/AlertPreview";
 import { sendTestAlert } from "@/utils/obsUtils";
 import { toast } from "sonner";
 
