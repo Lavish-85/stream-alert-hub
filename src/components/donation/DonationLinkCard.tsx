@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId, customUrl }
     fetchCustomUrl();
   }, [effectiveUserId, customUrl]);
   
-  // Make sure we have a valid donation link with the appropriate path
+  // Make sure we have a valid donation link with the appropriate path component (custom URL or user ID)
   const donationLink = effectiveUserId 
     ? `${window.location.origin}/donate/${effectiveCustomUrl || effectiveUserId}` 
     : `${window.location.origin}/donate/your-channel-id`;
@@ -76,7 +77,9 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId, customUrl }
       toast.error("User ID not available. Please refresh or log in again.");
       return;
     }
-    window.open(donationLink, '_blank');
+    
+    // Use window.open with _blank to open in a new tab
+    window.open(donationLink, '_blank', 'noopener,noreferrer');
   };
 
   return (
