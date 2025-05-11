@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -56,6 +57,12 @@ const DonationPage = () => {
     date: string;
     avatarUrl?: string;
   }>>([]);
+  
+  // Add state for theme colors
+  const [themeColors, setThemeColors] = useState({
+    primary: '#8445ff',
+    accent: '#4b1493'
+  });
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -129,7 +136,7 @@ const DonationPage = () => {
           // Also fetch additional settings - using the correct table name
           const { data: donationSettings } = await supabase
             .from('donation_page_settings')
-            .select('description, title, goal_amount, show_donation_goal, show_recent_donors')
+            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, primary_color, secondary_color')
             .eq('user_id', userId)
             .maybeSingle();
             
@@ -140,11 +147,19 @@ const DonationPage = () => {
           });
           
           // Update goal if we have custom settings
-          if (donationSettings?.goal_amount) {
+          if (donationSettings) {
             setDonationStats(prev => ({
               ...prev,
-              goal: donationSettings.goal_amount
+              goal: donationSettings.goal_amount || 10000
             }));
+            
+            // Set theme colors from donation settings
+            if (donationSettings.primary_color && donationSettings.secondary_color) {
+              setThemeColors({
+                primary: donationSettings.primary_color,
+                accent: donationSettings.secondary_color
+              });
+            }
           }
         } else {
           console.error("No streamer profile found for ID:", userId);
@@ -165,7 +180,7 @@ const DonationPage = () => {
           .order('created_at', { ascending: false });
 
         if (!donationsError && donations) {
-          const total = donations.reduce((sum, donation) => sum + donation.amount, 0);
+          const total = donations.reduce((sum, donation) => sum + Number(donation.amount), 0);
           const uniqueDonors = new Set(donations.map(d => d.donor_name)).size;
           const average = donations.length > 0 ? Math.round(total / donations.length) : 0;
           
@@ -174,14 +189,13 @@ const DonationPage = () => {
             total,
             supporters: uniqueDonors,
             average,
-            goal: prev.goal, // Keep existing goal or custom goal
           }));
           
           // Process recent donations for the RecentDonors component
           const recent = donations.slice(0, 5).map(donation => ({
             id: `${donation.donor_name}-${donation.created_at}`,
             name: donation.donor_name,
-            amount: donation.amount,
+            amount: Number(donation.amount),
             date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
               month: 'short', 
               day: 'numeric'
@@ -226,8 +240,27 @@ const DonationPage = () => {
     try {
       console.log("Processing donation with values:", values);
       
+      // Get the user ID to associate with this donation
+      let userId = channelId;
+      
+      // Check if this is a custom URL
+      const { data: customUrlData, error: customUrlError } = await supabase
+        .from('donation_page_settings')
+        .select('user_id')
+        .ilike('custom_url', channelId)
+        .maybeSingle();
+        
+      if (customUrlError) {
+        console.error("Error checking custom URL:", customUrlError);
+      } else if (customUrlData) {
+        console.log("Found user ID from custom URL:", customUrlData.user_id);
+        userId = customUrlData.user_id;
+      }
+      
       // Create an order directly in the database
       const paymentId = `manual_${Date.now()}_${Math.round(Math.random() * 1000000)}`;
+      
+      console.log("Using user ID for donation:", userId);
       
       // Insert donation record
       const { error: donationError } = await supabase
@@ -236,7 +269,7 @@ const DonationPage = () => {
           amount: values.amount,
           donor_name: values.name,
           message: values.message || "",
-          user_id: channelId,
+          user_id: userId,
           payment_id: paymentId
         });
         
@@ -399,7 +432,15 @@ const DonationPage = () => {
                       </h4>
                       <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
                     </div>
-                    <Progress value={progressPercentage} className="h-2" />
+                    {/* Apply themed colors to progress bar */}
+                    <Progress 
+                      value={progressPercentage} 
+                      className="h-2" 
+                      style={{
+                        backgroundColor: `${themeColors.primary}40`,
+                        '--progress-background': themeColors.primary
+                      } as React.CSSProperties} 
+                    />
                     <div className="mt-1 text-xs text-right text-muted-foreground">
                       Goal: ₹{donationStats.goal.toLocaleString()}
                     </div>
@@ -445,9 +486,19 @@ const DonationPage = () => {
 
         {/* Donation Form Column */}
         <Card className="w-full md:w-2/3 shadow-lg animate-fade-in">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-800">
-              Support {streamerInfo?.name || "this Streamer"}
+          <CardHeader 
+            className="text-center" 
+            style={{ 
+              background: `linear-gradient(to right, ${themeColors.primary}15, ${themeColors.accent}10)`,
+              borderBottom: `1px solid ${themeColors.primary}30` 
+            }}
+          >
+            <CardTitle className="text-2xl font-bold" style={{
+              background: `linear-gradient(to right, ${themeColors.primary}, ${themeColors.accent})`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              {streamerInfo?.name ? `Support ${streamerInfo.name}` : "Support this Streamer"}
             </CardTitle>
             <CardDescription>
               Your donation will appear on stream and help support great content
@@ -483,9 +534,14 @@ const DonationPage = () => {
                         variant={selectedAmount === amount ? "default" : "outline"} 
                         onClick={() => handleAmountSelect(amount)}
                         className={`
-                          ${selectedAmount === amount ? 'ring-2 ring-brand-500 ring-offset-1' : ''}
+                          ${selectedAmount === amount ? `ring-2 ring-offset-1` : ''}
                           hover:scale-105 transition-transform
                         `}
+                        style={selectedAmount === amount ? {
+                          backgroundColor: themeColors.primary,
+                          borderColor: themeColors.accent,
+                          ringColor: themeColors.primary
+                        } : {}}
                       >
                         ₹{amount}
                       </Button>
@@ -545,17 +601,26 @@ const DonationPage = () => {
                     <TooltipTrigger asChild>
                       <Button
                         type="submit"
-                        className="w-full relative overflow-hidden transition-all group bg-gradient-to-r from-brand-500 to-brand-700"
+                        className="w-full relative overflow-hidden transition-all group"
                         disabled={isLoading}
+                        style={{
+                          background: `linear-gradient(to right, ${themeColors.primary}, ${themeColors.accent})`,
+                        }}
                       >
-                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-brand-600 to-brand-800 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                        <span className="absolute inset-0 w-full h-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                          style={{
+                            background: `linear-gradient(to right, ${themeColors.accent}, ${themeColors.primary})`,
+                          }}></span>
                         <span className="relative flex items-center justify-center">
                           <Gift className="mr-2 h-4 w-4" />
                           {isLoading ? "Processing..." : "Donate Now"}
                         </span>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent className="bg-brand-50 border-brand-100">
+                    <TooltipContent style={{
+                      backgroundColor: `${themeColors.primary}10`,
+                      borderColor: `${themeColors.primary}30`,
+                    }}>
                       <p>Your donation will be displayed on stream!</p>
                     </TooltipContent>
                   </Tooltip>
@@ -564,8 +629,11 @@ const DonationPage = () => {
             </Form>
             
             <div className="mt-6 pt-4 border-t border-gray-100">
-              <div className="bg-brand-50 p-3 rounded-md">
-                <h4 className="font-semibold text-sm text-brand-800 mb-1 flex items-center">
+              <div style={{
+                backgroundColor: `${themeColors.primary}10`,
+                borderColor: `${themeColors.primary}30`,
+              }} className="p-3 rounded-md">
+                <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: themeColors.accent }}>
                   <Heart className="h-3 w-3 mr-1" /> Why donate?
                 </h4>
                 <p className="text-xs text-muted-foreground">

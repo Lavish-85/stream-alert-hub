@@ -73,15 +73,29 @@
 
 /* Smooth color transitions */
 .color-transition {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
 }
 
 /* Donation button hover effect */
 .donation-button {
-  transition: transform 0.2s ease, filter 0.2s ease, background-color 0.3s ease;
+  transition: transform 0.2s ease, filter 0.2s ease, background-color 0.3s ease, background 0.3s ease;
 }
 
 .donation-button:hover {
   transform: translateY(-2px);
   filter: brightness(110%);
+}
+
+/* Custom progress bar styling */
+:root {
+  --progress-background: theme('colors.brand.500');
+}
+
+.progress {
+  background-color: var(--progress-background);
+}
+
+/* Override Tailwind progress color with React inline styles */
+.progress[style] {
+  background-color: var(--progress-background);
 }
