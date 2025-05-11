@@ -27,15 +27,31 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
   useEffect(() => {
     const fetchDonors = async () => {
       if (initialDonors.length > 0) {
+        setDonors(initialDonors);
         return; // Skip fetching if initial donors are provided
       }
 
       try {
         setIsLoading(true);
+
+        // First, check if this is a custom URL
+        let userId = channelId;
+        
+        const { data: customUrlData, error: customUrlError } = await supabase
+          .from('donation_page_settings')
+          .select('user_id')
+          .ilike('custom_url', channelId)
+          .maybeSingle();
+          
+        if (!customUrlError && customUrlData) {
+          console.log("Found user ID from custom URL in RecentDonors:", customUrlData.user_id);
+          userId = customUrlData.user_id;
+        }
+
         const { data: donations, error } = await supabase
           .from('donations')
           .select('amount, donor_name, created_at')
-          .eq('user_id', channelId)
+          .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(5);
 
@@ -44,11 +60,12 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
           return;
         }
 
-        if (donations) {
+        if (donations && donations.length > 0) {
+          console.log("Fetched donors:", donations);
           const mappedDonors = donations.map(donation => ({
             id: `${donation.donor_name}-${donation.created_at}`,
             name: donation.donor_name,
-            amount: donation.amount,
+            amount: Number(donation.amount),
             date: new Date(donation.created_at || '').toLocaleDateString('en-US', { 
               month: 'short', 
               day: 'numeric'
@@ -56,6 +73,8 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
           }));
           
           setDonors(mappedDonors);
+        } else {
+          console.log("No donations found for user:", userId);
         }
       } catch (err) {
         console.error("Exception fetching donors:", err);
@@ -65,59 +84,82 @@ const RecentDonors: React.FC<RecentDonorsProps> = ({ channelId, initialDonors = 
     };
 
     fetchDonors();
-  }, [channelId, initialDonors.length]);
+  }, [channelId, initialDonors]);
 
   // Set up real-time subscription for new donations
   useEffect(() => {
     if (!channelId) return;
 
-    // Create a Supabase real-time channel subscription
-    const channel = supabase
-      .channel('public:donations')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'donations',
-          filter: `user_id=eq.${channelId}`
-        },
-        (payload) => {
-          console.log("New donation received:", payload);
-          const newDonation = payload.new;
-          
-          // Create a donor object from the new donation
-          const newDonor: Donor = {
-            id: `${newDonation.donor_name}-${newDonation.created_at}`,
-            name: newDonation.donor_name,
-            amount: newDonation.amount,
-            date: new Date(newDonation.created_at || '').toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric'
-            }),
-          };
+    // First, check if this is a custom URL
+    const setupRealtimeSubscription = async () => {
+      let userId = channelId;
+      
+      const { data: customUrlData, error: customUrlError } = await supabase
+        .from('donation_page_settings')
+        .select('user_id')
+        .ilike('custom_url', channelId)
+        .maybeSingle();
+        
+      if (!customUrlError && customUrlData) {
+        console.log("Found user ID from custom URL for realtime subscription:", customUrlData.user_id);
+        userId = customUrlData.user_id;
+      }
 
-          // Update the donors list (keeping only the 5 most recent)
-          setDonors(currentDonors => {
-            // Add the new donor at the beginning and keep only the 5 most recent
-            const updatedDonors = [newDonor, ...currentDonors].slice(0, 5);
+      console.log("Setting up realtime subscription for user:", userId);
+
+      // Create a Supabase real-time channel subscription
+      const channel = supabase
+        .channel('public:donations')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'donations',
+            filter: `user_id=eq.${userId}`
+          },
+          (payload) => {
+            console.log("New donation received in RecentDonors:", payload);
+            const newDonation = payload.new;
             
-            // Show toast notification for new donation
-            toast({
-              title: "New Donation!",
-              description: `${newDonor.name} just donated ₹${newDonor.amount}`,
+            // Create a donor object from the new donation
+            const newDonor: Donor = {
+              id: `${newDonation.donor_name}-${newDonation.created_at}`,
+              name: newDonation.donor_name,
+              amount: Number(newDonation.amount),
+              date: new Date(newDonation.created_at || '').toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric'
+              }),
+            };
+
+            // Update the donors list (keeping only the 5 most recent)
+            setDonors(currentDonors => {
+              // Add the new donor at the beginning and keep only the 5 most recent
+              const updatedDonors = [newDonor, ...currentDonors].slice(0, 5);
+              
+              // Show toast notification for new donation
+              toast({
+                title: "New Donation!",
+                description: `${newDonor.name} just donated ₹${newDonor.amount}`,
+              });
+              
+              return updatedDonors;
             });
-            
-            return updatedDonors;
-          });
-        }
-      )
-      .subscribe();
+          }
+        )
+        .subscribe((status) => {
+          console.log("Realtime subscription status:", status);
+        });
 
-    // Cleanup function to unsubscribe when component unmounts
-    return () => {
-      supabase.removeChannel(channel);
+      // Cleanup function to unsubscribe when component unmounts
+      return () => {
+        console.log("Removing realtime subscription");
+        supabase.removeChannel(channel);
+      };
     };
+
+    setupRealtimeSubscription();
   }, [channelId]);
 
   return (

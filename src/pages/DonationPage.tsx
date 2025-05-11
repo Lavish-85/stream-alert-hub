@@ -69,7 +69,7 @@ const DonationPage = () => {
   const [displaySettings, setDisplaySettings] = useState({
     showGoal: true,
     showRecentDonors: true,
-    showSupporters: true,
+    showSupporters: true, 
     showAverage: true
   });
   
@@ -210,7 +210,7 @@ const DonationPage = () => {
           // Also fetch additional settings - using the correct table name
           const { data: donationSettings } = await supabase
             .from('donation_page_settings')
-            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, primary_color, secondary_color')
+            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, show_supporters, show_average, primary_color, secondary_color')
             .eq('user_id', userId)
             .maybeSingle();
             
@@ -219,6 +219,21 @@ const DonationPage = () => {
             avatar_url: profile.avatar_url,
             bio: donationSettings?.description || "Thank you for supporting my content! Your donations help me create better streams for everyone."
           });
+          
+          // Apply theme colors to selection styling
+          if (donationSettings?.primary_color) {
+            document.documentElement.style.setProperty('--selection-color', donationSettings.primary_color);
+            document.documentElement.style.setProperty('--progress-background', donationSettings.primary_color);
+
+            // Add global style for text selection
+            const styleElement = document.createElement('style');
+            styleElement.innerHTML = `
+              ::selection {
+                background-color: ${donationSettings.primary_color}40;
+              }
+            `;
+            document.head.appendChild(styleElement);
+          }
           
           // Update goal if we have custom settings
           if (donationSettings) {
@@ -233,18 +248,14 @@ const DonationPage = () => {
                 primary: donationSettings.primary_color,
                 accent: donationSettings.secondary_color
               });
-              
-              // Update CSS variables for progress bar and other themed elements
-              document.documentElement.style.setProperty('--progress-background', donationSettings.primary_color);
-              document.documentElement.style.setProperty('--selection-color', donationSettings.primary_color);
             }
             
             // Update display settings based on streamer preferences
             setDisplaySettings({
               showGoal: donationSettings.show_donation_goal,
               showRecentDonors: donationSettings.show_recent_donors,
-              showSupporters: true, // Default to true, will be updated if we add these settings
-              showAverage: true // Default to true, will be updated if we add these settings
+              showSupporters: donationSettings.show_supporters ?? true,
+              showAverage: donationSettings.show_average ?? true
             });
           }
         } else {
@@ -540,7 +551,6 @@ const DonationPage = () => {
                         </h4>
                         <span className="text-lg font-bold">₹{donationStats.total.toLocaleString()}</span>
                       </div>
-                      {/* Apply themed colors to progress bar */}
                       <div className="relative pt-1">
                         <div className="overflow-hidden h-2 mb-1 text-xs flex rounded bg-gray-200">
                           <div 
