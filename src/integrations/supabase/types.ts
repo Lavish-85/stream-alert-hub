@@ -71,7 +71,11 @@ export type Database = {
           show_average: boolean
           show_donation_goal: boolean
           show_recent_donors: boolean
+          show_sponsors: boolean | null
           show_supporters: boolean
+          sponsor_banner_image: string | null
+          sponsor_banner_link: string | null
+          sponsor_logos: Json | null
           title: string
           updated_at: string | null
           user_id: string
@@ -89,7 +93,11 @@ export type Database = {
           show_average?: boolean
           show_donation_goal?: boolean
           show_recent_donors?: boolean
+          show_sponsors?: boolean | null
           show_supporters?: boolean
+          sponsor_banner_image?: string | null
+          sponsor_banner_link?: string | null
+          sponsor_logos?: Json | null
           title?: string
           updated_at?: string | null
           user_id: string
@@ -107,7 +115,11 @@ export type Database = {
           show_average?: boolean
           show_donation_goal?: boolean
           show_recent_donors?: boolean
+          show_sponsors?: boolean | null
           show_supporters?: boolean
+          sponsor_banner_image?: string | null
+          sponsor_banner_link?: string | null
+          sponsor_logos?: Json | null
           title?: string
           updated_at?: string | null
           user_id?: string

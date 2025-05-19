@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DollarSign, Copy, Check, ExternalLink } from "lucide-react";
+import { DollarSign, Copy, Check, ExternalLink, BadgeEuro } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,6 +117,16 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
               You need to be logged in to access the donation page.
             </p>
           )}
+
+          <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-100">
+            <h4 className="text-sm font-medium flex items-center text-blue-700 mb-1">
+              <BadgeEuro className="h-4 w-4 mr-1" /> Sponsorship Opportunities
+            </h4>
+            <p className="text-xs text-blue-600">
+              Your donation page now supports sponsor logos and a custom banner. 
+              This feature is perfect for showcasing your sponsors or pitching to potential partners.
+            </p>
+          </div>
         </div>
       </CardContent>
       <CardFooter>

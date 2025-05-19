@@ -1,6 +1,3 @@
-<think>
-
-</think>
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -15,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
-import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users } from "lucide-react";
+import { IndianRupee, Gift, HandHeart, Heart, AlertCircle, Star, Users, BadgeIndianRupee } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } from '@/services/razorpayService';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -73,8 +70,22 @@ const DonationPage = () => {
     showGoal: true,
     showRecentDonors: true,
     showSupporters: true, 
-    showAverage: true
+    showAverage: true,
+    showSponsors: true
   });
+  
+  // Add state for sponsor logos and banner
+  const [sponsorLogos, setSponsorLogos] = useState<Array<{
+    id: string;
+    url: string;
+    alt: string;
+    link?: string;
+  }>>([]);
+  
+  const [sponsorBanner, setSponsorBanner] = useState<{
+    imageUrl: string | null;
+    link: string | null;
+  }>({ imageUrl: null, link: null });
   
   // Initialize form
   const form = useForm<DonationFormValues>({
@@ -231,7 +242,7 @@ const DonationPage = () => {
           // Also fetch additional settings - using the correct table name
           const { data: donationSettings } = await supabase
             .from('donation_page_settings')
-            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, show_supporters, show_average, primary_color, secondary_color')
+            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, show_supporters, show_average, primary_color, secondary_color, sponsor_logos, show_sponsors, sponsor_banner_image, sponsor_banner_link')
             .eq('user_id', userId)
             .maybeSingle();
             
@@ -258,6 +269,19 @@ const DonationPage = () => {
           
           // Update goal if we have custom settings
           if (donationSettings) {
+            // Process sponsor logos if available
+            if (donationSettings.sponsor_logos && Array.isArray(donationSettings.sponsor_logos)) {
+              setSponsorLogos(donationSettings.sponsor_logos);
+            }
+            
+            // Process sponsor banner if available
+            if (donationSettings.sponsor_banner_image) {
+              setSponsorBanner({
+                imageUrl: donationSettings.sponsor_banner_image,
+                link: donationSettings.sponsor_banner_link || null
+              });
+            }
+            
             setDonationStats(prev => ({
               ...prev,
               goal: donationSettings.goal_amount || 10000
@@ -276,7 +300,8 @@ const DonationPage = () => {
               showGoal: donationSettings.show_donation_goal,
               showRecentDonors: donationSettings.show_recent_donors,
               showSupporters: donationSettings.show_supporters ?? true,
-              showAverage: donationSettings.show_average ?? true
+              showAverage: donationSettings.show_average ?? true,
+              showSponsors: donationSettings.show_sponsors ?? true
             });
           }
         } else {
@@ -625,6 +650,75 @@ const DonationPage = () => {
                 </div>
               </CardFooter>
             </Card>
+
+            {/* Sponsor Section */}
+            {displaySettings.showSponsors && (sponsorLogos.length > 0 || sponsorBanner.imageUrl) && (
+              <Card className="shadow-lg animate-fade-in">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <BadgeIndianRupee className="h-4 w-4 mr-2 text-amber-500" />
+                    Our Sponsors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Sponsor Banner */}
+                  {sponsorBanner.imageUrl && (
+                    <div className="w-full overflow-hidden rounded-md">
+                      {sponsorBanner.link ? (
+                        <a 
+                          href={sponsorBanner.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="block hover:opacity-90 transition-opacity"
+                        >
+                          <img 
+                            src={sponsorBanner.imageUrl}
+                            alt="Sponsor Banner"
+                            className="w-full h-auto rounded-md"
+                          />
+                        </a>
+                      ) : (
+                        <img 
+                          src={sponsorBanner.imageUrl}
+                          alt="Sponsor Banner"
+                          className="w-full h-auto rounded-md"
+                        />
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Sponsor Logos */}
+                  {sponsorLogos.length > 0 && (
+                    <div className="flex flex-wrap justify-center gap-3 pt-2">
+                      {sponsorLogos.map((logo) => (
+                        <div key={logo.id} className="w-16 h-16">
+                          {logo.link ? (
+                            <a 
+                              href={logo.link} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="block hover:opacity-90 transition-opacity"
+                            >
+                              <img 
+                                src={logo.url} 
+                                alt={logo.alt || "Sponsor"} 
+                                className="w-full h-full object-contain"
+                              />
+                            </a>
+                          ) : (
+                            <img 
+                              src={logo.url} 
+                              alt={logo.alt || "Sponsor"} 
+                              className="w-full h-full object-contain"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             
             {/* Recent Donors section - only show if enabled */}
             {displaySettings.showRecentDonors && channelId && (
