@@ -76,6 +76,19 @@ const DonationPage = () => {
     showAverage: true
   });
   
+  // Add state for sponsor data
+  const [sponsorData, setSponsorData] = useState<{
+    logos: Array<{ name: string; imageUrl: string; linkUrl: string }>;
+    bannerImage: string | null;
+    bannerLink: string | null;
+    showSponsors: boolean;
+  }>({
+    logos: [],
+    bannerImage: null,
+    bannerLink: null,
+    showSponsors: true
+  });
+  
   // Initialize form
   const form = useForm<DonationFormValues>({
     resolver: zodResolver(donationFormSchema),
@@ -231,7 +244,7 @@ const DonationPage = () => {
           // Also fetch additional settings - using the correct table name
           const { data: donationSettings } = await supabase
             .from('donation_page_settings')
-            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, show_supporters, show_average, primary_color, secondary_color')
+            .select('description, title, goal_amount, show_donation_goal, show_recent_donors, show_supporters, show_average, primary_color, secondary_color, sponsor_logos, sponsor_banner_image, sponsor_banner_link, show_sponsors')
             .eq('user_id', userId)
             .maybeSingle();
             
@@ -277,6 +290,14 @@ const DonationPage = () => {
               showRecentDonors: donationSettings.show_recent_donors,
               showSupporters: donationSettings.show_supporters ?? true,
               showAverage: donationSettings.show_average ?? true
+            });
+            
+            // Set sponsor data
+            setSponsorData({
+              logos: donationSettings.sponsor_logos || [],
+              bannerImage: donationSettings.sponsor_banner_image || null,
+              bannerLink: donationSettings.sponsor_banner_link || null,
+              showSponsors: donationSettings.show_sponsors ?? true
             });
           }
         } else {
@@ -536,6 +557,79 @@ const DonationPage = () => {
     );
   };
 
+  // Create sponsor logos component
+  const SponsorLogos = () => {
+    if (!sponsorData.showSponsors || sponsorData.logos.length === 0) return null;
+    
+    return (
+      <Card className="shadow-md mt-4 animate-fade-in-delayed">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Our Sponsors</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap justify-center gap-4 items-center">
+            {sponsorData.logos.map((logo, index) => (
+              <a 
+                key={index} 
+                href={logo.linkUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="transition-transform hover:scale-105"
+              >
+                <div className="flex flex-col items-center">
+                  <img 
+                    src={logo.imageUrl} 
+                    alt={logo.name}
+                    className="h-12 object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://via.placeholder.com/100x50?text=Sponsor";
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground mt-1">{logo.name}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Create sponsor banner component
+  const SponsorBanner = () => {
+    if (!sponsorData.showSponsors || !sponsorData.bannerImage) return null;
+    
+    const BannerContent = () => (
+      <div className="w-full overflow-hidden rounded-lg relative">
+        <img 
+          src={sponsorData.bannerImage!} 
+          alt="Sponsor Banner" 
+          className="w-full h-auto object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = "https://via.placeholder.com/728x90?text=Sponsor+Banner";
+          }}
+        />
+      </div>
+    );
+    
+    return (
+      <div className="mt-4 animate-fade-in-delayed">
+        {sponsorData.bannerLink ? (
+          <a 
+            href={sponsorData.bannerLink} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="block"
+          >
+            <BannerContent />
+          </a>
+        ) : (
+          <BannerContent />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4 color-transition" 
       style={{ 
@@ -626,6 +720,11 @@ const DonationPage = () => {
               </CardFooter>
             </Card>
             
+            {/* Sponsor Banner - Show at top on mobile, can be placed at different positions based on preference */}
+            <div className="md:hidden">
+              <SponsorBanner />
+            </div>
+            
             {/* Recent Donors section - only show if enabled */}
             {displaySettings.showRecentDonors && channelId && (
               <RecentDonors 
@@ -634,6 +733,14 @@ const DonationPage = () => {
                 className="animate-fade-in-delayed" 
               />
             )}
+            
+            {/* Sponsor Logos - Shown after recent donors */}
+            <SponsorLogos />
+            
+            {/* Sponsor Banner - Show at bottom on desktop */}
+            <div className="hidden md:block">
+              <SponsorBanner />
+            </div>
           </div>
         </div>
 

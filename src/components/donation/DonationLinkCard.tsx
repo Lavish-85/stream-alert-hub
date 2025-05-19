@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DollarSign, Copy, Check, ExternalLink } from "lucide-react";
+import { DollarSign, Copy, Check, ExternalLink, Icons, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,6 +73,11 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
     window.open(donationLink, '_blank');
   };
 
+  const openSponsorSettings = () => {
+    // Navigate to sponsor settings page
+    window.location.href = '/settings?tab=sponsors';
+  };
+
   return (
     <Card className="shadow-md">
       <CardHeader>
@@ -102,15 +107,27 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
             </Button>
           </div>
           
-          <Button 
-            variant="secondary" 
-            className="w-full"
-            onClick={openDonationPage}
-            disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Preview Donation Page
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="secondary" 
+              className="w-full"
+              onClick={openDonationPage}
+              disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Preview Donation Page
+            </Button>
+            
+            <Button
+              variant="outline"
+              className="flex-shrink-0"
+              onClick={openSponsorSettings}
+              disabled={(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl}
+            >
+              <Users className="h-4 w-4" />
+              <span className="sr-only">Sponsor Settings</span>
+            </Button>
+          </div>
           
           {(!effectiveUserId || effectiveUserId === 'your-channel-id') && !customUrl && (
             <p className="text-sm text-amber-600">
