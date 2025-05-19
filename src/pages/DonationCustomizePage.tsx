@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { convertToSponsorLogos, convertSponsorLogosToJson, SponsorLogo } from "@/utils/sponsorUtils";
-import { toast } from "sonner";
+import { toast as sonnerToast } from "sonner";
 
 // Form schema for donation page settings
 const donationPageSchema = z.object({
@@ -292,7 +291,7 @@ const DonationCustomizePage = () => {
   const addSponsorLogo = () => {
     // Validate required fields
     if (!newLogo.url || !newLogo.alt) {
-      toast.error("Logo URL and alt text are required");
+      sonnerToast.error("Logo URL and alt text are required");
       return;
     }
     
@@ -309,12 +308,12 @@ const DonationCustomizePage = () => {
     // Reset form
     setNewLogo({ id: '', url: '', alt: '', link: '' });
     
-    toast.success("Sponsor logo added");
+    sonnerToast.success("Sponsor logo added");
   };
   
   const removeSponsorLogo = (id: string) => {
     setSponsorLogos(sponsorLogos.filter(logo => logo.id !== id));
-    toast.success("Sponsor logo removed");
+    sonnerToast.success("Sponsor logo removed");
   };
 
   // Watch color values for preview
