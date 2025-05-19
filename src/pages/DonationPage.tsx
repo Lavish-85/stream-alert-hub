@@ -17,11 +17,18 @@ import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
-import SponsorSection from "@/components/donation/SponsorSection";
-import { convertToSponsorLogos, SponsorLogo } from "@/utils/sponsorUtils";
+import { Json } from "@/integrations/supabase/types";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
+
+// Define the sponsor logo type to match our state
+interface SponsorLogo {
+  id: string;
+  url: string;
+  alt: string;
+  link?: string;
+}
 
 // Form schema
 const donationFormSchema = z.object({
@@ -76,7 +83,12 @@ const DonationPage = () => {
   });
   
   // Add state for sponsor logos and banner
-  const [sponsorLogos, setSponsorLogos] = useState<SponsorLogo[]>([]);
+  const [sponsorLogos, setSponsorLogos] = useState<Array<{
+    id: string;
+    url: string;
+    alt: string;
+    link?: string;
+  }>>([]);
   
   const [sponsorBanner, setSponsorBanner] = useState<{
     imageUrl: string | null;
@@ -673,14 +685,73 @@ const DonationPage = () => {
               </CardFooter>
             </Card>
 
-            {/* Sponsor Section - now using our new component */}
+            {/* Sponsor Section */}
             {displaySettings.showSponsors && (sponsorLogos.length > 0 || sponsorBanner.imageUrl) && (
-              <SponsorSection
-                sponsorBanner={sponsorBanner}
-                sponsorLogos={sponsorLogos}
-                showSponsors={displaySettings.showSponsors}
-                themeColors={themeColors}
-              />
+              <Card className="shadow-lg animate-fade-in">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center">
+                    <BadgeIndianRupee className="h-4 w-4 mr-2 text-amber-500" />
+                    Our Sponsors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Sponsor Banner */}
+                  {sponsorBanner.imageUrl && (
+                    <div className="w-full overflow-hidden rounded-md">
+                      {sponsorBanner.link ? (
+                        <a 
+                          href={sponsorBanner.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="block hover:opacity-90 transition-opacity"
+                        >
+                          <img 
+                            src={sponsorBanner.imageUrl}
+                            alt="Sponsor Banner"
+                            className="w-full h-auto rounded-md"
+                          />
+                        </a>
+                      ) : (
+                        <img 
+                          src={sponsorBanner.imageUrl}
+                          alt="Sponsor Banner"
+                          className="w-full h-auto rounded-md"
+                        />
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Sponsor Logos */}
+                  {sponsorLogos.length > 0 && (
+                    <div className="flex flex-wrap justify-center gap-3 pt-2">
+                      {sponsorLogos.map((logo) => (
+                        <div key={logo.id} className="w-16 h-16">
+                          {logo.link ? (
+                            <a 
+                              href={logo.link} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="block hover:opacity-90 transition-opacity"
+                            >
+                              <img 
+                                src={logo.url} 
+                                alt={logo.alt || "Sponsor"} 
+                                className="w-full h-full object-contain"
+                              />
+                            </a>
+                          ) : (
+                            <img 
+                              src={logo.url} 
+                              alt={logo.alt || "Sponsor"} 
+                              className="w-full h-full object-contain"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
             
             {/* Recent Donors section - only show if enabled */}

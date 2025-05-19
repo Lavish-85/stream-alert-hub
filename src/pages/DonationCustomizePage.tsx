@@ -1,3 +1,4 @@
+
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +14,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Save, Palette, ImageIcon, Link2, Plus, Trash2, BadgeIndianRupee } from "lucide-react";
+import { Loader2, Save, Palette, ImageIcon, Link2, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -45,7 +46,7 @@ const donationPageSchema = z.object({
 type DonationPageFormValues = z.infer<typeof donationPageSchema>;
 
 const DonationCustomizePage = () => {
-  const { toast: shadcnToast } = useToast();
+  const { toast } = useToast();
   const { user, profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [existingSettings, setExistingSettings] = useState<DonationPageFormValues | null>(null);
@@ -200,14 +201,6 @@ const DonationCustomizePage = () => {
       
       let result;
       
-      // Convert the sponsorLogos array to a format that Supabase can store as JSON
-      const sponsorLogosJson = sponsorLogos.map(logo => ({
-        id: logo.id,
-        url: logo.url,
-        alt: logo.alt,
-        link: logo.link || ''
-      }));
-      
       if (existingRecord) {
         // Update existing record
         result = await supabase
@@ -226,7 +219,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogosJson, // Using the converted JSON-safe array
+            sponsor_logos: sponsorLogos, // Using the state value
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);
@@ -249,7 +242,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogosJson, // Using the converted JSON-safe array
+            sponsor_logos: sponsorLogos, // Using the state value
             updated_at: new Date().toISOString()
           });
       }
@@ -645,10 +638,7 @@ const DonationCustomizePage = () => {
                 <TabsContent value="sponsors" className="space-y-4 pt-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <ImageIcon className="h-5 w-5 mr-2 text-primary" />
-                        Sponsor Banner
-                      </CardTitle>
+                      <CardTitle>Sponsor Banner</CardTitle>
                       <CardDescription>
                         Add a banner image for your main sponsor
                       </CardDescription>
@@ -701,18 +691,22 @@ const DonationCustomizePage = () => {
                         )}
                       />
                       
-                      {form.watch("sponsorBannerImage") && (
+                      {field => field.value && (
                         <div className="mt-2 p-2 border rounded-md">
                           <p className="text-xs text-muted-foreground mb-1">Banner preview:</p>
                           <div className="aspect-[5/1] bg-gray-100 rounded flex items-center justify-center overflow-hidden">
-                            <img 
-                              src={form.watch("sponsorBannerImage") || ''} 
-                              alt="Sponsor banner preview" 
-                              className="object-cover w-full h-full" 
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
-                              }}
-                            />
+                            {field.value ? (
+                              <img 
+                                src={field.value} 
+                                alt="Sponsor banner preview" 
+                                className="object-cover w-full h-full" 
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
+                                }}
+                              />
+                            ) : (
+                              <p className="text-muted-foreground">No banner image set</p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -721,17 +715,14 @@ const DonationCustomizePage = () => {
                   
                   <Card>
                     <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <BadgeIndianRupee className="h-5 w-5 mr-2 text-primary" />
-                        Sponsor Logos
-                      </CardTitle>
+                      <CardTitle>Sponsor Logos</CardTitle>
                       <CardDescription>
                         Add logos of your sponsors to display on your donation page
                       </CardDescription>
                     </CardHeader>
                     
                     <CardContent className="space-y-4">
-                      <div className="space-y-4 p-4 border rounded-md bg-card/50">
+                      <div className="space-y-4 p-4 border rounded-md">
                         <h4 className="text-sm font-medium">Add New Sponsor Logo</h4>
                         
                         <div className="grid grid-cols-1 gap-3">
@@ -847,7 +838,7 @@ const DonationCustomizePage = () => {
         
         {/* Sidebar - 2/5 width on md+ screens */}
         <div className="md:col-span-2">
-          <Card className="sticky top-6">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Palette className="h-5 w-5 mr-2" />
