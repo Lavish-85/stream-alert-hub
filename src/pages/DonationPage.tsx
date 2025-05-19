@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -18,9 +17,18 @@ import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
+import { Json } from "@/integrations/supabase/types";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
+
+// Define the sponsor logo type to match our state
+interface SponsorLogo {
+  id: string;
+  url: string;
+  alt: string;
+  link?: string;
+}
 
 // Form schema
 const donationFormSchema = z.object({
@@ -96,6 +104,32 @@ const DonationPage = () => {
       message: "",
     },
   });
+
+  // Type-safe conversion function for sponsor logos
+  const convertToSponsorLogos = (data: Json | null): SponsorLogo[] => {
+    if (!data || !Array.isArray(data)) {
+      return [];
+    }
+    
+    // Map and validate each item in the array
+    return data.filter(item => {
+      // Make sure item is an object with the required fields
+      return typeof item === 'object' && 
+             item !== null &&
+             'id' in item && 
+             'url' in item && 
+             'alt' in item;
+    }).map(item => {
+      const logo = item as Record<string, unknown>;
+      
+      return {
+        id: String(logo.id || ''),
+        url: String(logo.url || ''),
+        alt: String(logo.alt || ''),
+        link: logo.link ? String(logo.link) : undefined
+      };
+    });
+  };
 
   // Update the form value when selectedAmount changes
   useEffect(() => {
@@ -269,9 +303,9 @@ const DonationPage = () => {
           
           // Update goal if we have custom settings
           if (donationSettings) {
-            // Process sponsor logos if available
-            if (donationSettings.sponsor_logos && Array.isArray(donationSettings.sponsor_logos)) {
-              setSponsorLogos(donationSettings.sponsor_logos);
+            // Process sponsor logos if available - use the type conversion function
+            if (donationSettings.sponsor_logos) {
+              setSponsorLogos(convertToSponsorLogos(donationSettings.sponsor_logos));
             }
             
             // Process sponsor banner if available
