@@ -201,6 +201,14 @@ const DonationCustomizePage = () => {
       
       let result;
       
+      // Convert the sponsorLogos array to a format that Supabase can store as JSON
+      const sponsorLogosJson = sponsorLogos.map(logo => ({
+        id: logo.id,
+        url: logo.url,
+        alt: logo.alt,
+        link: logo.link || ''
+      }));
+      
       if (existingRecord) {
         // Update existing record
         result = await supabase
@@ -219,7 +227,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogos, // Using the state value
+            sponsor_logos: sponsorLogosJson, // Using the converted JSON-safe array
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);
@@ -242,7 +250,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogos, // Using the state value
+            sponsor_logos: sponsorLogosJson, // Using the converted JSON-safe array
             updated_at: new Date().toISOString()
           });
       }
@@ -638,7 +646,10 @@ const DonationCustomizePage = () => {
                 <TabsContent value="sponsors" className="space-y-4 pt-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Sponsor Banner</CardTitle>
+                      <CardTitle className="flex items-center">
+                        <ImageIcon className="h-5 w-5 mr-2 text-primary" />
+                        Sponsor Banner
+                      </CardTitle>
                       <CardDescription>
                         Add a banner image for your main sponsor
                       </CardDescription>
@@ -691,22 +702,18 @@ const DonationCustomizePage = () => {
                         )}
                       />
                       
-                      {field => field.value && (
+                      {form.watch("sponsorBannerImage") && (
                         <div className="mt-2 p-2 border rounded-md">
                           <p className="text-xs text-muted-foreground mb-1">Banner preview:</p>
                           <div className="aspect-[5/1] bg-gray-100 rounded flex items-center justify-center overflow-hidden">
-                            {field.value ? (
-                              <img 
-                                src={field.value} 
-                                alt="Sponsor banner preview" 
-                                className="object-cover w-full h-full" 
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
-                                }}
-                              />
-                            ) : (
-                              <p className="text-muted-foreground">No banner image set</p>
-                            )}
+                            <img 
+                              src={form.watch("sponsorBannerImage") || ''} 
+                              alt="Sponsor banner preview" 
+                              className="object-cover w-full h-full" 
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
+                              }}
+                            />
                           </div>
                         </div>
                       )}
@@ -715,14 +722,17 @@ const DonationCustomizePage = () => {
                   
                   <Card>
                     <CardHeader>
-                      <CardTitle>Sponsor Logos</CardTitle>
+                      <CardTitle className="flex items-center">
+                        <BadgeIndianRupee className="h-5 w-5 mr-2 text-primary" />
+                        Sponsor Logos
+                      </CardTitle>
                       <CardDescription>
                         Add logos of your sponsors to display on your donation page
                       </CardDescription>
                     </CardHeader>
                     
                     <CardContent className="space-y-4">
-                      <div className="space-y-4 p-4 border rounded-md">
+                      <div className="space-y-4 p-4 border rounded-md bg-card/50">
                         <h4 className="text-sm font-medium">Add New Sponsor Logo</h4>
                         
                         <div className="grid grid-cols-1 gap-3">
@@ -838,7 +848,7 @@ const DonationCustomizePage = () => {
         
         {/* Sidebar - 2/5 width on md+ screens */}
         <div className="md:col-span-2">
-          <Card>
+          <Card className="sticky top-6">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Palette className="h-5 w-5 mr-2" />
