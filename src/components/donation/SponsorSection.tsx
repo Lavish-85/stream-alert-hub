@@ -114,7 +114,7 @@ const SponsorSection: React.FC<SponsorSectionProps> = ({
                       <img 
                         src={logo.url} 
                         alt={logo.alt} 
-                        className="w-full h-full object-contain"
+                        className="max-h-6 max-w-full object-contain"
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-5 transition-all duration-300 rounded-md"></div>
                     </a>
@@ -123,7 +123,7 @@ const SponsorSection: React.FC<SponsorSectionProps> = ({
                       <img 
                         src={logo.url} 
                         alt={logo.alt} 
-                        className="w-full h-full object-contain"
+                        className="max-h-6 max-w-full object-contain"
                       />
                     </div>
                   )}

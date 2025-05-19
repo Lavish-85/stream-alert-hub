@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -14,7 +13,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Save, Palette, ImageIcon, Link2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Save, Palette, ImageIcon, Link2, Plus, Trash2, BadgeIndianRupee } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -46,7 +45,7 @@ const donationPageSchema = z.object({
 type DonationPageFormValues = z.infer<typeof donationPageSchema>;
 
 const DonationCustomizePage = () => {
-  const { toast } = useToast();
+  const { toast: shadcnToast } = useToast();
   const { user, profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [existingSettings, setExistingSettings] = useState<DonationPageFormValues | null>(null);
