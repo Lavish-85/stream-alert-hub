@@ -294,7 +294,13 @@ const DonationPage = () => {
             
             // Set sponsor data
             setSponsorData({
-              logos: donationSettings.sponsor_logos || [],
+              logos: Array.isArray(donationSettings.sponsor_logos) 
+                ? donationSettings.sponsor_logos.map((logo: any) => ({
+                    name: logo.name || '',
+                    imageUrl: logo.imageUrl || '',
+                    linkUrl: logo.linkUrl || ''
+                  }))
+                : [],
               bannerImage: donationSettings.sponsor_banner_image || null,
               bannerLink: donationSettings.sponsor_banner_link || null,
               showSponsors: donationSettings.show_sponsors ?? true
