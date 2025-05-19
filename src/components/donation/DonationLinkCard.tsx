@@ -129,4 +129,3 @@ const DonationLinkCard: React.FC<DonationLinkCardProps> = ({ userId }) => {
 };
 
 export default DonationLinkCard;
-

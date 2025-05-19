@@ -1,3 +1,6 @@
+<think>
+
+</think>
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -171,6 +174,7 @@ const DonationPage = () => {
         
         // First try to find by custom URL
         let userId = channelId;
+        let isCustomUrl = false;
         
         // Check if this is a custom URL - using the correct table name: donation_page_settings
         const { data: customUrlData, error: customUrlError } = await supabase
@@ -184,6 +188,7 @@ const DonationPage = () => {
         } else if (customUrlData) {
           console.log("Found user ID from custom URL:", customUrlData.user_id);
           userId = customUrlData.user_id;
+          isCustomUrl = true;
         }
         
         // Fetch streamer profile
@@ -195,12 +200,28 @@ const DonationPage = () => {
 
         if (profileError) {
           console.error("Error fetching streamer info:", profileError);
-          setError("Could not find this streamer");
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not find this streamer",
-          });
+          // Instead of immediately showing an error, check if we've tried using a custom URL yet
+          if (!isCustomUrl) {
+            // If not, try checking if the channelId is a valid UUID
+            const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelId);
+            
+            if (!isValidUUID) {
+              console.error("Channel ID is not a valid UUID and not a custom URL");
+              setError("Could not find this streamer");
+              toast({
+                variant: "destructive", 
+                title: "Error",
+                description: "Could not find this streamer",
+              });
+            }
+          } else {
+            setError("Could not find this streamer");
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Could not find this streamer",
+            });
+          }
           return;
         }
 
