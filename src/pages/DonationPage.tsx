@@ -881,7 +881,7 @@ const DonationPage = () => {
               </form>
             </Form>
             
-            <div className="mt-6 pt-4 border-t border-gray-100">
+            {/* <div className="mt-6 pt-4 border-t border-gray-100">
               <div style={{
                 backgroundColor: `${themeColors.primary}10`,
                 borderColor: `${themeColors.primary}30`,
@@ -893,7 +893,7 @@ const DonationPage = () => {
                   Your donation helps {streamerInfo?.name} create better content, improve stream quality,
                   and continue entertaining viewers like you. Every contribution makes a difference!
                 </p>
-              </div>
+              </div> */}
               
               {/* Moved Sponsor Banner here - below the donate button section */}
               {displaySettings.showSponsors && sponsorBanner.imageUrl && (
