@@ -19,7 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ColorPicker } from "@/components/ui/color-picker";
-import { convertToSponsorLogos, SponsorLogo } from "@/utils/sponsorUtils";
+import { convertToSponsorLogos, convertSponsorLogosToJson, SponsorLogo } from "@/utils/sponsorUtils";
 import { toast } from "sonner";
 
 // Form schema for donation page settings
@@ -199,6 +199,9 @@ const DonationCustomizePage = () => {
         throw new Error(`Error checking existing record: ${checkError.message}`);
       }
       
+      // Convert sponsor logos to JSON for database storage
+      const sponsorLogosJson = convertSponsorLogosToJson(sponsorLogos);
+      
       let result;
       
       if (existingRecord) {
@@ -219,7 +222,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogos, // Using the state value
+            sponsor_logos: sponsorLogosJson,
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);
@@ -242,7 +245,7 @@ const DonationCustomizePage = () => {
             secondary_color: values.accentColor || "#4b1493",
             sponsor_banner_image: values.sponsorBannerImage || null,
             sponsor_banner_link: values.sponsorBannerLink || null,
-            sponsor_logos: sponsorLogos, // Using the state value
+            sponsor_logos: sponsorLogosJson,
             updated_at: new Date().toISOString()
           });
       }
@@ -321,6 +324,24 @@ const DonationCustomizePage = () => {
   const showSupporters = form.watch("showSupporters");
   const showAverage = form.watch("showAverage");
   const showSponsors = form.watch("showSponsors");
+  
+  // Create a render function for the sponsor banner preview
+  const renderSponsorBannerPreview = (imageUrl: string) => {
+    if (!imageUrl) return (
+      <p className="text-muted-foreground">No banner image set</p>
+    );
+    
+    return (
+      <img 
+        src={imageUrl} 
+        alt="Sponsor banner preview" 
+        className="object-cover w-full h-full" 
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
+        }}
+      />
+    );
+  };
   
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -691,22 +712,11 @@ const DonationCustomizePage = () => {
                         )}
                       />
                       
-                      {field => field.value && (
+                      {form.watch("sponsorBannerImage") && (
                         <div className="mt-2 p-2 border rounded-md">
                           <p className="text-xs text-muted-foreground mb-1">Banner preview:</p>
                           <div className="aspect-[5/1] bg-gray-100 rounded flex items-center justify-center overflow-hidden">
-                            {field.value ? (
-                              <img 
-                                src={field.value} 
-                                alt="Sponsor banner preview" 
-                                className="object-cover w-full h-full" 
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/500x100?text=Banner+Preview';
-                                }}
-                              />
-                            ) : (
-                              <p className="text-muted-foreground">No banner image set</p>
-                            )}
+                            {renderSponsorBannerPreview(form.watch("sponsorBannerImage") || "")}
                           </div>
                         </div>
                       )}

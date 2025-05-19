@@ -44,3 +44,16 @@ export const convertToSponsorLogos = (data: Json | null): SponsorLogo[] => {
   console.log('Converted sponsor logos:', convertedLogos);
   return convertedLogos;
 };
+
+/**
+ * Converts a typed array of sponsor logos to a JSON format suitable for database storage
+ */
+export const convertSponsorLogosToJson = (logos: SponsorLogo[]): Json => {
+  // Create a plain object array without methods
+  return logos.map(logo => ({
+    id: logo.id,
+    url: logo.url,
+    alt: logo.alt,
+    link: logo.link
+  })) as Json;
+};
