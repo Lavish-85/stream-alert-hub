@@ -17,6 +17,7 @@ import { createOrder, loadRazorpayScript, openRazorpayCheckout, verifyPayment } 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import RecentDonors from "@/components/donation/RecentDonors";
+import { convertToSponsorLogos } from "@/utils/sponsorUtils";
 import { Json } from "@/integrations/supabase/types";
 
 // Suggested donation amounts
@@ -686,7 +687,7 @@ const DonationPage = () => {
             </Card>
 
             {/* Sponsor Section */}
-            {displaySettings.showSponsors && (sponsorLogos.length > 0 || sponsorBanner.imageUrl) && (
+            {displaySettings.showSponsors && sponsorLogos.length > 0 && (
               <Card className="shadow-lg animate-fade-in">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center">
@@ -695,61 +696,33 @@ const DonationPage = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Sponsor Banner */}
-                  {sponsorBanner.imageUrl && (
-                    <div className="w-full overflow-hidden rounded-md">
-                      {sponsorBanner.link ? (
-                        <a 
-                          href={sponsorBanner.link} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="block hover:opacity-90 transition-opacity"
-                        >
-                          <img 
-                            src={sponsorBanner.imageUrl}
-                            alt="Sponsor Banner"
-                            className="w-full h-auto rounded-md"
-                          />
-                        </a>
-                      ) : (
-                        <img 
-                          src={sponsorBanner.imageUrl}
-                          alt="Sponsor Banner"
-                          className="w-full h-auto rounded-md"
-                        />
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Sponsor Logos */}
-                  {sponsorLogos.length > 0 && (
-                    <div className="flex flex-wrap justify-center gap-3 pt-2">
-                      {sponsorLogos.map((logo) => (
-                        <div key={logo.id} className="w-16 h-16">
-                          {logo.link ? (
-                            <a 
-                              href={logo.link} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="block hover:opacity-90 transition-opacity"
-                            >
-                              <img 
-                                src={logo.url} 
-                                alt={logo.alt || "Sponsor"} 
-                                className="w-full h-full object-contain"
-                              />
-                            </a>
-                          ) : (
+                  {/* Sponsor Logos Section - Keep this as is */}
+                  <div className="flex flex-wrap justify-center gap-3 pt-2">
+                    {sponsorLogos.map((logo) => (
+                      <div key={logo.id} className="w-16 h-16">
+                        {logo.link ? (
+                          <a 
+                            href={logo.link} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="block hover:opacity-90 transition-opacity"
+                          >
                             <img 
                               src={logo.url} 
                               alt={logo.alt || "Sponsor"} 
                               className="w-full h-full object-contain"
                             />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                          </a>
+                        ) : (
+                          <img 
+                            src={logo.url} 
+                            alt={logo.alt || "Sponsor"} 
+                            className="w-full h-full object-contain"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -921,6 +894,32 @@ const DonationPage = () => {
                   and continue entertaining viewers like you. Every contribution makes a difference!
                 </p>
               </div>
+              
+              {/* Moved Sponsor Banner here - below the donate button section */}
+              {displaySettings.showSponsors && sponsorBanner.imageUrl && (
+                <div className="mt-4 w-full overflow-hidden rounded-md">
+                  {sponsorBanner.link ? (
+                    <a 
+                      href={sponsorBanner.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="block hover:opacity-90 transition-opacity"
+                    >
+                      <img 
+                        src={sponsorBanner.imageUrl}
+                        alt="Sponsor Banner"
+                        className="w-full h-auto rounded-md"
+                      />
+                    </a>
+                  ) : (
+                    <img 
+                      src={sponsorBanner.imageUrl}
+                      alt="Sponsor Banner"
+                      className="w-full h-auto rounded-md"
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
