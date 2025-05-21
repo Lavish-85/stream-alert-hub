@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -90,7 +91,7 @@ const LiveAlertsPage = () => {
           ...activeStyle,
           show_popup: value
         });
-        toast.success(`Popup alerts ${value ? 'enabled' : 'disabled'}`);
+        toast.success("Popup alerts " + (value ? "enabled" : "disabled"));
       } catch (err) {
         console.error("Failed to save popup setting:", err);
         toast.error("Failed to save setting");
@@ -201,7 +202,7 @@ const LiveAlertsPage = () => {
               }
             } else if (data.type === "error") {
               console.error("Error from WebSocket server:", data.message);
-              toast.error(`Server error: ${data.message}`);
+              toast.error("Server error: " + data.message);
             }
           } catch (error) {
             console.error("Error parsing WebSocket message:", error);
@@ -325,7 +326,7 @@ const LiveAlertsPage = () => {
     if (!isOBSMode) {
       const isTest = isTestDonation(newDonation.payment_id) ? " (Test)" : "";
       toast(`${newDonation.donor_name}${isTest} donated ${formatIndianRupees(newDonation.amount)}`, {
-        description: newDonation.message || "No message",
+        description: newDonation.message || "No message"
       });
     }
     
