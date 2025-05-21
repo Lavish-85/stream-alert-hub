@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -39,6 +40,70 @@ const donationFormSchema = z.object({
 });
 
 type DonationFormValues = z.infer<typeof donationFormSchema>;
+
+// Success popup component - moved outside the main component
+const SuccessPopup = ({ 
+  show, 
+  onClose, 
+  streamerInfo, 
+  themeColors 
+}: { 
+  show: boolean;
+  onClose: () => void;
+  streamerInfo: { name?: string; avatar_url?: string; bio?: string; } | null;
+  themeColors: { primary: string; accent: string; }
+}) => {
+  if (!show) return null;
+  
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 animate-fade-in">
+      <Card className="w-full max-w-md shadow-xl animate-scale-in">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold text-green-600">
+            <HandHeart className="mx-auto mb-2 h-12 w-12" />
+            Thank You!
+          </CardTitle>
+          <CardDescription>
+            Your donation has been received
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <div className="mb-4 flex flex-col items-center">
+            {streamerInfo?.avatar_url && (
+              <Avatar className="h-16 w-16 mb-2">
+                <AvatarImage src={streamerInfo.avatar_url} alt={streamerInfo.name} />
+                <AvatarFallback>{streamerInfo.name?.charAt(0)}</AvatarFallback>
+              </Avatar>
+            )}
+            <p className="mb-4 text-lg">
+              Thank you for supporting{" "}
+              <span className="font-bold">{streamerInfo?.name}</span>
+            </p>
+            <div className="bg-green-100 text-green-800 p-4 rounded-lg">
+              <p className="font-medium">Your donation will:</p>
+              <ul className="text-sm mt-2 text-left list-disc list-inside">
+                <li>Appear in their stream shortly</li>
+                <li>Help them create better content</li>
+                <li>Support their creative journey</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-center gap-3">
+          <Button 
+            onClick={onClose} 
+            variant="default"
+            style={{
+              backgroundColor: themeColors.primary,
+            }}
+          >
+            Continue
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+};
 
 const DonationPage = () => {
   const { channelId } = useParams<{ channelId: string }>();
@@ -542,60 +607,6 @@ const DonationPage = () => {
 
   const progressPercentage = Math.min(100, Math.round((donationStats.total / donationStats.goal) * 100));
 
-  // Success popup component
-  const SuccessPopup = () => {
-    if (!showSuccessPopup) return null;
-    
-    return (
-      <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 animate-fade-in">
-        <Card className="w-full max-w-md shadow-xl animate-scale-in">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-green-600">
-              <HandHeart className="mx-auto mb-2 h-12 w-12" />
-              Thank You!
-            </CardTitle>
-            <CardDescription>
-              Your donation has been received
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <div className="mb-4 flex flex-col items-center">
-              {streamerInfo?.avatar_url && (
-                <Avatar className="h-16 w-16 mb-2">
-                  <AvatarImage src={streamerInfo.avatar_url} alt={streamerInfo.name} />
-                  <AvatarFallback>{streamerInfo.name?.charAt(0)}</AvatarFallback>
-                </Avatar>
-              )}
-              <p className="mb-4 text-lg">
-                Thank you for supporting{" "}
-                <span className="font-bold">{streamerInfo?.name}</span>
-              </p>
-              <div className="bg-green-100 text-green-800 p-4 rounded-lg">
-                <p className="font-medium">Your donation will:</p>
-                <ul className="text-sm mt-2 text-left list-disc list-inside">
-                  <li>Appear in their stream shortly</li>
-                  <li>Help them create better content</li>
-                  <li>Support their creative journey</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-center gap-3">
-            <Button 
-              onClick={handleCloseSuccessPopup} 
-              variant="default"
-              style={{
-                backgroundColor: themeColors.primary,
-              }}
-            >
-              Continue
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center p-4 color-transition" 
       style={{ 
@@ -881,20 +892,7 @@ const DonationPage = () => {
               </form>
             </Form>
             
-            {/* <div className="mt-6 pt-4 border-t border-gray-100">
-              <div style={{
-                backgroundColor: `${themeColors.primary}10`,
-                borderColor: `${themeColors.primary}30`,
-              }} className="p-3 rounded-md">
-                <h4 className="font-semibold text-sm mb-1 flex items-center" style={{ color: themeColors.accent }}>
-                  <Heart className="h-3 w-3 mr-1" /> Why donate?
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Your donation helps {streamerInfo?.name} create better content, improve stream quality,
-                  and continue entertaining viewers like you. Every contribution makes a difference!
-                </p>
-              </div> */}
-              
+            <div className="mt-6 pt-4 border-t border-gray-100">
               {/* Moved Sponsor Banner here - below the donate button section */}
               {displaySettings.showSponsors && sponsorBanner.imageUrl && (
                 <div className="mt-4 w-full overflow-hidden rounded-md">
@@ -926,7 +924,12 @@ const DonationPage = () => {
       </div>
       
       {/* Success Popup */}
-      <SuccessPopup />
+      <SuccessPopup 
+        show={showSuccessPopup} 
+        onClose={handleCloseSuccessPopup} 
+        streamerInfo={streamerInfo} 
+        themeColors={themeColors}
+      />
     </div>
   );
 };
