@@ -3,6 +3,9 @@ import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 
+// Valid animation types
+export type AnimationType = "fade" | "slide" | "bounce" | "zoom";
+
 export interface AlertStyle {
   id: string;
   name: string;
@@ -10,7 +13,7 @@ export interface AlertStyle {
   background_color: string;
   text_color: string;
   font_family: string;
-  animation_type: "fade" | "slide" | "bounce" | "zoom";
+  animation_type: AnimationType;
   sound: string;
   volume: number;
   duration: number;
@@ -19,6 +22,19 @@ export interface AlertStyle {
   user_id: string;
   show_popup?: boolean;
 }
+
+// Helper to validate animation type
+const isValidAnimationType = (value: string): value is AnimationType => {
+  return ["fade", "slide", "bounce", "zoom"].includes(value as string);
+};
+
+// Helper to ensure the animation type is valid
+const ensureValidAnimationType = (value: string | null | undefined): AnimationType => {
+  if (value && isValidAnimationType(value)) {
+    return value;
+  }
+  return "fade"; // Default to fade
+};
 
 interface AlertStyleContextType {
   styles: AlertStyle[];
@@ -89,16 +105,23 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
         }
 
         console.log("Fetched alert styles:", data);
-        setStyles(data);
+        
+        // Properly convert and validate animation types
+        const typedStyles = data.map(style => ({
+          ...style,
+          animation_type: ensureValidAnimationType(style.animation_type)
+        })) as AlertStyle[];
+        
+        setStyles(typedStyles);
 
         // Find active style
-        const active = data.find(style => style.is_active === true);
+        const active = typedStyles.find(style => style.is_active === true);
         if (active) {
           console.log("Found active style:", active);
           setActiveStyleState(active);
-        } else if (data.length > 0) {
+        } else if (typedStyles.length > 0) {
           // If no active style, set the first one as active
-          await setActiveStyle(data[0].id);
+          await setActiveStyle(typedStyles[0].id);
         }
 
         setIsLoading(false);
@@ -129,7 +152,7 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
         is_active: false,
         description: style.description || "",
         font_family: style.font_family || "inherit",
-        animation_type: style.animation_type || "fade",
+        animation_type: ensureValidAnimationType(style.animation_type),
         sound: style.sound || "",
         volume: style.volume || 50,
         duration: style.duration || 5
@@ -145,7 +168,12 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       }
 
       if (data && data.length > 0) {
-        setStyles(prevStyles => [...prevStyles, data[0]]);
+        const createdStyle = {
+          ...data[0],
+          animation_type: ensureValidAnimationType(data[0].animation_type)
+        } as AlertStyle;
+        
+        setStyles(prevStyles => [...prevStyles, createdStyle]);
       }
 
       setIsLoading(false);
@@ -162,9 +190,16 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       setIsLoading(true);
       setError(null);
 
+      // Make sure animation_type is valid if it exists
+      const safeUpdates = {
+        ...updates,
+        animation_type: updates.animation_type ? 
+          ensureValidAnimationType(updates.animation_type) : undefined
+      };
+
       const { data, error } = await supabase
         .from("alert_styles")
-        .update(updates)
+        .update(safeUpdates)
         .eq("id", id)
         .select();
 
@@ -173,17 +208,20 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       }
 
       if (data && data.length > 0) {
+        const updatedStyle = {
+          ...data[0],
+          animation_type: ensureValidAnimationType(data[0].animation_type)
+        } as AlertStyle;
+        
         setStyles(prevStyles => 
           prevStyles.map(style => 
-            style.id === id ? { ...style, ...updates } : style
+            style.id === id ? updatedStyle : style
           )
         );
         
         // Update active style if this was the one updated
         if (activeStyle?.id === id) {
-          setActiveStyleState(prevActiveStyle => 
-            prevActiveStyle ? { ...prevActiveStyle, ...updates } : null
-          );
+          setActiveStyleState(updatedStyle);
         }
       }
 
@@ -262,7 +300,12 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       );
       
       if (data && data.length > 0) {
-        setActiveStyleState(data[0]);
+        const newActiveStyle = {
+          ...data[0],
+          animation_type: ensureValidAnimationType(data[0].animation_type) 
+        } as AlertStyle;
+        
+        setActiveStyleState(newActiveStyle);
       }
 
       setIsLoading(false);

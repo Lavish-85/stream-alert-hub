@@ -1,11 +1,12 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { AnimationType } from "@/contexts/AlertStyleContext";
 
 interface AlertPreviewProps {
   textColor: string;
   backgroundColor: string;
-  animationType: "fade" | "slide" | "bounce" | "zoom";
+  animationType: AnimationType;
   fontFamily: string;
 }
 

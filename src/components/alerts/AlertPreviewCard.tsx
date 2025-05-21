@@ -6,11 +6,12 @@ import { Play } from "lucide-react";
 import AlertPreview from "@/components/alerts/AlertPreview";
 import { sendTestAlert } from "@/utils/obsUtils";
 import { toast } from "sonner";
+import { AnimationType } from "@/contexts/AlertStyleContext";
 
 interface AlertPreviewCardProps {
   textColor: string;
   backgroundColor: string;
-  animationType: "fade" | "slide" | "bounce" | "zoom";
+  animationType: AnimationType;
   fontFamily: string;
 }
 

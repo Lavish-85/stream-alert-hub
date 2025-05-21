@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -8,13 +9,11 @@ import {
 } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { useAlertStyle } from "@/contexts/AlertStyleContext";
+import { useAlertStyle, AnimationType } from "@/contexts/AlertStyleContext";
 import { useAuth } from "@/contexts/AuthContext";
 import AlertSettingsForm from "@/components/alerts/AlertSettingsForm";
 import AlertPreviewCard from "@/components/alerts/AlertPreviewCard";
 import AlertTips from "@/components/alerts/AlertTips";
-
-type AnimationType = "fade" | "slide" | "bounce" | "zoom";
 
 const AlertsPage = () => {
   const { activeStyle, isLoading, updateStyleSetting, createStyle } = useAlertStyle();

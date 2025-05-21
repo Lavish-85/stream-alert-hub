@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Loader2, AlignLeft, Palette, Speaker, Type, Brush, Save } from "lucide-react";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { useToast } from "@/hooks/use-toast";
-import { AlertStyle } from "@/contexts/AlertStyleContext";
+import { AlertStyle, AnimationType } from "@/contexts/AlertStyleContext";
 
 interface AlertSettingsFormProps {
   activeStyle: AlertStyle | null;
@@ -28,7 +28,7 @@ const AlertSettingsForm: React.FC<AlertSettingsFormProps> = ({
     background_color: string;
     volume: number;
     duration: number;
-    animation_type: "fade" | "slide" | "bounce" | "zoom";
+    animation_type: AnimationType;
     sound: string | null;
     font_family: string;
     description: string;
@@ -110,7 +110,7 @@ const AlertSettingsForm: React.FC<AlertSettingsFormProps> = ({
     { value: "slide", label: "Slide" },
     { value: "bounce", label: "Bounce" },
     { value: "zoom", label: "Zoom" },
-  ];
+  ] as const;
 
   return (
     <div className="space-y-4">
@@ -212,7 +212,7 @@ const AlertSettingsForm: React.FC<AlertSettingsFormProps> = ({
                 <Button
                   key={option.value}
                   variant={form.animation_type === option.value ? "default" : "outline"}
-                  onClick={() => setForm({ ...form, animation_type: option.value as "fade" | "slide" | "bounce" | "zoom" })}
+                  onClick={() => setForm({ ...form, animation_type: option.value })}
                 >
                   {option.label}
                 </Button>
