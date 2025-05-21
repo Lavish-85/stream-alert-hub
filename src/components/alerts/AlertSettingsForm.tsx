@@ -22,17 +22,26 @@ const AlertSettingsForm: React.FC<AlertSettingsFormProps> = ({
   onSave,
 }) => {
   const { toast } = useToast();
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    text_color: string;
+    background_color: string;
+    volume: number;
+    duration: number;
+    animation_type: "fade" | "slide" | "bounce" | "zoom";
+    sound: string | null;
+    font_family: string;
+    description: string;
+  }>({
     name: "Default",
     text_color: "#ffffff",
     background_color: "#111827",
     volume: 50,
     duration: 5,
-    animation_type: "fade" as "fade" | "slide" | "bounce" | "zoom",
-    sound: null as string | null,
+    animation_type: "fade",
+    sound: null,
     font_family: "inherit",
     description: "Default alert style",
-    // Don't include show_popup in the form data since it doesn't exist in the database
   });
 
   // Track popup visibility separately for UI, but don't send to database

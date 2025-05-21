@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -15,13 +14,15 @@ import AlertSettingsForm from "@/components/alerts/AlertSettingsForm";
 import AlertPreviewCard from "@/components/alerts/AlertPreviewCard";
 import AlertTips from "@/components/alerts/AlertTips";
 
+type AnimationType = "fade" | "slide" | "bounce" | "zoom";
+
 const AlertsPage = () => {
   const { activeStyle, isLoading, updateStyleSetting, createStyle } = useAlertStyle();
   const { user } = useAuth();
   const [previewState, setPreviewState] = useState({
     text_color: "#ffffff",
     background_color: "#111827",
-    animation_type: "fade" as "fade" | "slide" | "bounce" | "zoom",
+    animation_type: "fade" as AnimationType,
     font_family: "inherit",
   });
 
@@ -71,7 +72,6 @@ const AlertsPage = () => {
           const { show_popup, ...updateData } = formData;
           
           await updateStyleSetting({
-            ...activeStyle,
             ...updateData,
           });
         } catch (error) {

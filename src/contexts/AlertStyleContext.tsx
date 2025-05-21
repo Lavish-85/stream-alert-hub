@@ -10,7 +10,7 @@ export interface AlertStyle {
   background_color: string;
   text_color: string;
   font_family: string;
-  animation_type: string;
+  animation_type: "fade" | "slide" | "bounce" | "zoom";
   sound: string;
   volume: number;
   duration: number;
@@ -35,7 +35,7 @@ interface AlertStyleContextType {
 const AlertStyleContext = React.createContext<AlertStyleContextType | undefined>(undefined);
 
 // Create a separate consumer component that doesn't directly use useAuth
-export function AlertStyleConsumer({ children }: { children: React.ReactNode }) {
+export function AlertStyleConsumer({ children }: { children: (context: AlertStyleContextType) => React.ReactNode }) {
   return (
     <AlertStyleContext.Consumer>
       {(context) => {
@@ -50,7 +50,8 @@ export function AlertStyleConsumer({ children }: { children: React.ReactNode }) 
 
 export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) => {
   // Check if we're in a context where useAuth is available
-  const auth = React.useContext(React.createContext<any | undefined>(undefined));
+  const AuthContext = React.createContext<any | undefined>(undefined);
+  const auth = React.useContext(AuthContext);
   const isAuthAvailable = auth !== undefined;
   
   // If auth is available, use it; otherwise use local state
@@ -119,10 +120,19 @@ export const AlertStyleProvider = ({ children }: { children: React.ReactNode }) 
       setIsLoading(true);
       setError(null);
 
+      // Ensure required fields have default values
       const newStyle = {
-        ...style,
+        name: style.name || "Default Style",
+        background_color: style.background_color || "#111827",
+        text_color: style.text_color || "#ffffff",
         user_id: user.id,
         is_active: false,
+        description: style.description || "",
+        font_family: style.font_family || "inherit",
+        animation_type: style.animation_type || "fade",
+        sound: style.sound || "",
+        volume: style.volume || 50,
+        duration: style.duration || 5
       };
 
       const { data, error } = await supabase
