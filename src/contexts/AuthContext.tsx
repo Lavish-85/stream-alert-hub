@@ -21,6 +21,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, metadata?: Record<string, any>) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
+  getWebSocketAuthToken: () => Promise<string>;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
@@ -253,6 +254,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Generate a WebSocket authentication token
+  const getWebSocketAuthToken = async (): Promise<string> => {
+    try {
+      if (!session?.access_token) {
+        throw new Error("No active session found");
+      }
+      
+      // For security, we'll generate a short-lived token specifically for WebSocket connections
+      // Create a simple JWT with the user ID and a short expiration
+      const payload = {
+        user_id: user?.id,
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour expiration
+        sub: "ws_auth",
+        session_id: session.access_token.substring(0, 16) // Use part of the access token as a unique session ID
+      };
+      
+      // For now, we'll just return the access token
+      // In a production environment, you would have a server endpoint to create a dedicated WebSocket token
+      return session.access_token;
+    } catch (error: any) {
+      console.error("Error generating WebSocket auth token:", error);
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -263,7 +289,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signIn,
         signUp,
         signOut,
-        updateProfile
+        updateProfile,
+        getWebSocketAuthToken
       }}
     >
       {children}

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from "react-hook-form";
@@ -20,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import RecentDonors from "@/components/donation/RecentDonors";
 import { convertToSponsorLogos } from "@/utils/sponsorUtils";
 import { Json } from "@/integrations/supabase/types";
+import { sendDonationAlert } from "@/services/donationService";
 
 // Suggested donation amounts
 const SUGGESTED_AMOUNTS = [100, 500, 1000, 2000];
@@ -506,7 +506,7 @@ const DonationPage = () => {
       console.log("Using user ID for donation:", userId);
       
       // Insert donation record
-      const { error: donationError } = await supabase
+      const { data: donationData, error: donationError } = await supabase
         .from('donations')
         .insert({
           amount: values.amount,
@@ -514,8 +514,10 @@ const DonationPage = () => {
           message: values.message || "",
           user_id: userId,
           payment_id: paymentId
-        });
-        
+        })
+        .select()
+        .single();
+      
       if (donationError) {
         console.error("Error creating donation:", donationError);
         toast({
@@ -526,6 +528,20 @@ const DonationPage = () => {
         setError(`Failed to process donation: ${donationError.message}`);
         setIsLoading(false);
         return;
+      }
+
+      // Send the donation alert through our custom WebSocket service
+      // This is in addition to the Supabase realtime event that will be triggered automatically
+      try {
+        await sendDonationAlert(userId, {
+          payment_id: paymentId,
+          amount: values.amount,
+          donor_name: values.name,
+          message: values.message || null,
+        });
+      } catch (alertError) {
+        console.error("Error sending donation alert:", alertError);
+        // Non-critical error - donation is still recorded
       }
 
       // Show success popup instead of navigating away
