@@ -253,14 +253,14 @@ export const AlertDesigner = () => {
 
   const bringToFront = () => {
     if (!selectedObject || !fabricCanvas) return;
-    selectedObject.bringToFront();
+    fabricCanvas.bringObjectToFront(selectedObject);
     fabricCanvas.renderAll();
     toast.success("Brought to front!");
   };
 
   const sendToBack = () => {
     if (!selectedObject || !fabricCanvas) return;
-    selectedObject.sendToBack();
+    fabricCanvas.sendObjectToBack(selectedObject);
     fabricCanvas.renderAll();
     toast.success("Sent to back!");
   };
