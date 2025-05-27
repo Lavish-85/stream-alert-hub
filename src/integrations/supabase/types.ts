@@ -223,6 +223,7 @@ export type Database = {
           created_at: string | null
           display_name: string | null
           id: string
+          razorpay_account_id: string | null
           streamer_name: string | null
           username: string
         }
@@ -232,6 +233,7 @@ export type Database = {
           created_at?: string | null
           display_name?: string | null
           id: string
+          razorpay_account_id?: string | null
           streamer_name?: string | null
           username: string
         }
@@ -241,6 +243,7 @@ export type Database = {
           created_at?: string | null
           display_name?: string | null
           id?: string
+          razorpay_account_id?: string | null
           streamer_name?: string | null
           username?: string
         }
