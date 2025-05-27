@@ -1,0 +1,138 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove any UI elements that might overlap in OBS mode */
+.obs-container * {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Custom animations for alerts */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-fade-in-delayed {
+  animation: fadeIn 0.5s ease-in-out 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.5s ease-in-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.animate-bounce {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Font families for alerts */
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+.font-roboto {
+  font-family: 'Roboto', sans-serif;
+}
+
+.font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
+
+.font-montserrat {
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Smooth color transitions */
+.color-transition {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+}
+
+/* Donation button hover effect */
+.donation-button {
+  transition: transform 0.2s ease, filter 0.2s ease, background-color 0.3s ease, background 0.3s ease;
+}
+
+.donation-button:hover {
+  transform: translateY(-2px);
+  filter: brightness(110%);
+}
+
+/* Custom progress bar styling */
+:root {
+  --progress-background: theme('colors.brand.500');
+  --selection-color: theme('colors.brand.500');
+}
+
+/* Style the text selection */
+::selection {
+  background-color: var(--selection-color);
+  color: white;
+}
+
+.progress {
+  background-color: var(--progress-background);
+}
+
+/* Override Tailwind progress color with React inline styles */
+.progress[style] {
+  background-color: var(--progress-background);
+}
+
+/* Custom styles for the donation page */
+.donation-goal-card {
+  border-left: 4px solid var(--progress-background);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.donation-amount-button.selected {
+  background-color: var(--progress-background);
+  border-color: var(--selection-color);
+  color: white;
+}
+
+/* Make focused input fields use the theme color */
+input:focus, textarea:focus {
+  border-color: var(--progress-background);
+  box-shadow: 0 0 0 2px rgba(var(--progress-background), 0.2);
+  outline: none;
+}
+
+/* Style the popup animations */
+@keyframes popup {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.success-popup {
+  animation: popup 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
