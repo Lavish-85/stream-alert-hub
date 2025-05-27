@@ -22,7 +22,7 @@ import './index.css'
 
 const queryClient = new QueryClient()
 
-const QueryClient = ({ children }: { children: React.ReactNode }) => (
+const AppProviders = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <AlertStyleProvider>
@@ -34,7 +34,7 @@ const QueryClient = ({ children }: { children: React.ReactNode }) => (
 
 function App() {
   return (
-    <QueryClient>
+    <AppProviders>
       <Toaster />
       <BrowserRouter>
         <Routes>
@@ -99,7 +99,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </QueryClient>
+    </AppProviders>
   );
 }
 
