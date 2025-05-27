@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas, Textbox, FabricObject, Rect, Circle, FabricImage } from "fabric";
+import { Canvas as FabricCanvas, Textbox, FabricObject, Rect, Circle, FabricImage, Point } from "fabric";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,7 +90,8 @@ export const AlertDesigner = () => {
       newZoom *= 0.999 ** delta;
       if (newZoom > 20) newZoom = 20;
       if (newZoom < 0.01) newZoom = 0.01;
-      canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, newZoom);
+      const point = new Point(opt.e.offsetX, opt.e.offsetY);
+      canvas.zoomToPoint(point, newZoom);
       setZoom(newZoom);
       opt.e.preventDefault();
       opt.e.stopPropagation();
@@ -252,14 +253,14 @@ export const AlertDesigner = () => {
 
   const bringToFront = () => {
     if (!selectedObject || !fabricCanvas) return;
-    fabricCanvas.bringToFront(selectedObject);
+    selectedObject.bringToFront();
     fabricCanvas.renderAll();
     toast.success("Brought to front!");
   };
 
   const sendToBack = () => {
     if (!selectedObject || !fabricCanvas) return;
-    fabricCanvas.sendToBack(selectedObject);
+    selectedObject.sendToBack();
     fabricCanvas.renderAll();
     toast.success("Sent to back!");
   };
